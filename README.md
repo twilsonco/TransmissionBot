@@ -5,6 +5,7 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 ## Features
 * Completely self-contained: Get the python dependencies, configure a single python file, and run
 * Use of `Embeds` for pretty output
+* Uses reactions in lieu of text input where appropriate
 * User whitelist and blacklist to control access
 * Channel list to limit access to specified channel(s)
 * Complete management of transfers:
