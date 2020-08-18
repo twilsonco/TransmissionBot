@@ -18,11 +18,11 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 ## Example images
 * Transfer summary
 
-![summary](https://github.com/twilsonco/TransmissionBot/blob/master/ex-summary.png)
+![summary](https://github.com/twilsonco/TransmissionBot/blob/master/ex-summary1.png)
 
 * Modifying existing transfers
 
-![modify](https://github.com/twilsonco/TransmissionBot/blob/master/ex-modify.png)
+![modify](https://github.com/twilsonco/TransmissionBot/blob/master/ex-modify1.png)
 
 
 ## Install
