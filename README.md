@@ -15,6 +15,8 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 	* `t/summary` Print simple summary of all transfers
 * In-channel documentation using `t/help [COMMAND]`
 
+![summary](https://github.com/twilsonco/TransmissionBot/blob/master/ex-summary.png)![modify](https://github.com/twilsonco/TransmissionBot/blob/master/ex-modify.png)
+
 ## Install
 1. Get [Transmission](https://transmissionbt.com) and setup its [web interface](https://helpdeskgeek.com/how-to/using-the-transmission-web-interface/)
 2. Install python 3, [transmissionrpc](https://pypi.org/project/transmissionrpc/), and [discord.py](https://pypi.org/project/discord.py/)
