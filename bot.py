@@ -1,6 +1,7 @@
 """"
 Copyright © twilsonco 2020
-Description: This is a discord bot to manage torrent transfers through the Transmission transmissionrpc python library.
+Description:
+This is a discord bot to manage torrent transfers through the Transmission transmissionrpc python library.
 
 Version: 1.0
 """
@@ -29,6 +30,8 @@ BLACKLIST = [USER_IDS]
 WHITELIST = [USER_IDS]
 CHANNEL_IDS=[CHANNEL_IDS]
 LOGO_URL="https://iyanovich.files.wordpress.com/2009/04/transmission-logo.png"
+
+
 
 TSCLIENT_CONFIG={
 	'host': "10.0.1.2",
@@ -457,12 +460,11 @@ async def a(context, *, content=""):
 #
 # 	return embed
 
-torListLegend="• Legend:\n⬇️download  rate, ⬆️upload  rate, ⚖️seed  ratio, 🔻downloading, 🌱seeding, 🏁finished, ⏸paused\n• Error:\n✅none, ⚠️tracker  warning, ☄️tracker  error, 🔥local  error\n• Info:\n🐢stalled, 🐇running, 🔒private, 🔓public "
 
 def torList(torrents, author_name="Torrent Transfers",title=None,description=None):
 	states = ('downloading', 'seeding', 'stopped', 'finished','all')
 	stateEmoji = {i:j for i,j in zip(states,['🔻','🌱','⏸','🏁','🔁'])}
-	errorStrs = ['✅','📡⚠️','📡‼️','🖥‼️']
+	errorStrs = ['✅','⚠️','🌐','🖥']
 
 	def torListLine(t):
 		down = humanbytes(t.progress * 0.01 * t.totalSize)
@@ -487,7 +489,6 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 	if len(torrents) > 0:
 		while i < len(torrents):
 			embed=discord.Embed(title=title,description=description,color=0xb51a00)
-			embed.set_author(name=author_name, icon_url=LOGO_URL)
 			for j in range(25):
 				embed.add_field(name=nameList[i],value=valList[i],inline=False)
 				i += 1
@@ -497,14 +498,12 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 					break
 				if i >= len(torrents):
 					break
-			embed.timestamp = datetime.datetime.now(tz=pytz.timezone('America/Denver'))
 			embeds.append(embed)
-	
-		embeds[-1].set_footer(text=torListLegend)
 	else:
 		embeds.append(discord.Embed(title=title, description="No matching transfers found!", color=0xb51a00))
-		embeds[-1].set_author(name=author_name, icon_url=LOGO_URL)
-		embeds[-1].timestamp = datetime.datetime.now(tz=pytz.timezone('America/Denver'))
+
+	embeds[-1].set_author(name=author_name, icon_url=LOGO_URL)
+	embeds[-1].set_footer(text="📜 Symbol legend")
 	
 	return embeds
 
@@ -566,7 +565,20 @@ async def list(context, *, content=""):
 		embeds = torList(torrents, title="{} transfer{} matching '`{}`'".format(len(torrents),'' if len(torrents)==1 else 's',content))
 		
 		for e in embeds:
-			await context.message.channel.send(embed=e)
+			msg = await context.message.channel.send(embed=e)
+		
+		await msg.add_reaction('📜')
+		
+		def check(reaction, user):
+			return user == context.message.author and str(reaction.emoji) == '📜'
+		
+		try:
+			reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check)
+		except asyncio.TimeoutError:
+			pass
+		else:
+			if str(reaction.emoji) == '📜':
+				await legend(context)
 @client.command(name='l', pass_context=True)
 async def l(context, *, content=""):
 	await list(context, content=content)
@@ -605,8 +617,7 @@ def torSummary(torrents):
 	embed.add_field(name="⬇️ {}/s".format(totDownRate), value="⬆️ {}/s".format(totUpRate), inline=False)
 	embed.add_field(name="⏬ {} of {}".format(totDown,totSize), value="⏫ {}  ⚖️ {}".format(totUp,totRatio), inline=False)
 	embed.add_field(name="🔁 {} transfer{} total".format(numTot,"" if numTot == 0 else "s"), value="🔻 {} 🌱 {} 🏁 {} ⏸ {}".format(numInState[0],numInState[1],numInState[3],numInState[2]), inline=False)
-	embed.set_footer(text=topRatios+'\n• Legend:\n⬇️total  download  rate, ⬆️total  upload  rate, ⏬total  downloaded, ⏫total  uploaded, 🔻downloading, 🌱seeding, 🏁finished, ⏸paused, ⚖️total  seed  ratio')
-	embed.timestamp = datetime.datetime.now(tz=pytz.timezone('America/Denver'))
+	embed.set_footer(text=topRatios+"\n📜 Symbol legend")
 	# await context.message.channel.send(embed=embed)
 	return embed,numInState
 				
@@ -614,14 +625,15 @@ def torSummary(torrents):
 async def summary(context, *, content=""):
 	if await CommandPrecheck(context):
 		states = ('downloading', 'seeding', 'paused', 'finished','all')
-		stateEmoji = ['🔻','🌱','⏸','🏁','🔃']
+		stateEmoji = ['🔻','🌱','⏸','🏁','🔃','📜']
 		
 		summary=torSummary(TSCLIENT.get_torrents())
 		msg = await context.message.channel.send(embed=summary[0])
 		for i in range(len(summary[1])):
 			if summary[1][i] > 0:
 				await msg.add_reaction(stateEmoji[i])
-		await msg.add_reaction(stateEmoji[-1])
+		for i in stateEmoji[-2:]:
+			await msg.add_reaction(i)
 		
 		def check(reaction, user):
 			return user == context.message.author and str(reaction.emoji) in stateEmoji
@@ -631,8 +643,11 @@ async def summary(context, *, content=""):
 		except asyncio.TimeoutError:
 			pass
 		else:
-			cmds = {i:j for i,j in zip(stateEmoji,('--filter downloading', '--filter seeding', '--filter stopped', '--filter finished', ''))}
-			await list(context, content=cmds[str(reaction.emoji)])
+			if str(reaction.emoji) in stateEmoji[:-1]:
+				cmds = {i:j for i,j in zip(stateEmoji,('--filter downloading', '--filter seeding', '--filter stopped', '--filter finished', ''))}
+				await list(context, content=cmds[str(reaction.emoji)])
+			elif str(reaction.emoji) == stateEmoji[-1]:
+				await legend(context)
 @client.command(name='s', pass_context=True)
 async def s(context, *, content=""):
 	await summary(context, content=content)
@@ -681,8 +696,7 @@ async def modify(context, *, content=""):
 				opEmoji = ['⏸','▶️','❌','🗑']
 				opStr = "⏸pause ▶️resume ❌remove 🗑remove  and  delete"
 				embeds = torList(torrents,author_name="Click a reaction to choose modification".format(len(torrents), '' if len(torrents)==1 else 's'),title="{} transfer{} matching '`{}`' will be modified".format(len(torrents), '' if len(torrents)==1 else 's', content))
-				embeds[-1].set_footer(text=torListLegend+"\n• Options:\n"+opStr)
-				embeds[-1].timestamp = datetime.datetime.now(tz=pytz.timezone('America/Denver'))
+				# embeds[-1].set_footer(text=opStr)
 			else:
 				embed=discord.Embed(title="Modify transfers",color=0xb51a00)
 				embed.set_author(name="No matching transfers found!", icon_url=LOGO_URL)
@@ -695,13 +709,14 @@ async def modify(context, *, content=""):
 			embed=discord.Embed(title="React to choose modification",color=0xb51a00)
 			embed.set_author(name="All transfers will be affected!", icon_url=LOGO_URL)
 			embed.set_footer(text=opStr)
-			embed.timestamp = datetime.datetime.now(tz=pytz.timezone('America/Denver'))
 			embeds = [embed]
 		msgs = [await context.message.channel.send(embed=e) for e in embeds]
 		
 		if not allOnly and len(torrents) == 0:
 			return
-	
+		
+		opEmoji.append('📜')
+		
 		for i in opEmoji:
 			await msgs[-1].add_reaction(i)
 	
@@ -713,45 +728,60 @@ async def modify(context, *, content=""):
 		except asyncio.TimeoutError:
 			return
 		else:
-			cmds = {i:j for i,j in zip(opEmoji,ops)}
-			cmd = cmds[str(reaction.emoji)]
+			if str(reaction.emoji) == opEmoji[-1]:
+				await legend(context)
+			elif str(reaction.emoji) in opEmoji[:-1]:
+				cmds = {i:j for i,j in zip(opEmoji,ops)}
+				cmd = cmds[str(reaction.emoji)]
 			
-			doContinue = True
-			if "remove" in cmds[str(reaction.emoji)]:
-				embed=discord.Embed(title="Are you sure you wish to remove{} {} transfer{}?".format(' and DELETE' if 'delete' in cmds[str(reaction.emoji)] else '', len(torrents), '' if len(torrents)==1 else 's'),description="**This action is irreversible!**",color=0xb51a00)
-				embed.set_footer(text="react ✅ to continue or ❌ to cancel")
-				msg = await context.message.channel.send(embed=embed)
+				doContinue = True
+				if "remove" in cmds[str(reaction.emoji)]:
+					embed=discord.Embed(title="Are you sure you wish to remove{} {} transfer{}?".format(' and DELETE' if 'delete' in cmds[str(reaction.emoji)] else '', len(torrents), '' if len(torrents)==1 else 's'),description="**This action is irreversible!**",color=0xb51a00)
+					embed.set_footer(text="react ✅ to continue or ❌ to cancel")
+					msg = await context.message.channel.send(embed=embed)
 	
-				for i in ['✅','❌']:
-					await msg.add_reaction(i)
+					for i in ['✅','❌']:
+						await msg.add_reaction(i)
 					
-				def check1(reaction, user):
-					return user == context.message.author and str(reaction.emoji) in ['✅','❌']
-				try:
-					reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check1)
-				except asyncio.TimeoutError:
-					doContinue = False
-				else:
-					doContinue = str(reaction.emoji) == '✅'
-			if doContinue:
-				if "pause" in cmd:
-					stop_torrents(torrents)
-				elif "resume" in cmd:
-					resume_torrents(torrents)
-				else:
-					remove_torrents(torrents,delete_files="delete" in cmd)
+					def check1(reaction, user):
+						return user == context.message.author and str(reaction.emoji) in ['✅','❌']
+					try:
+						reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check1)
+					except asyncio.TimeoutError:
+						doContinue = False
+					else:
+						doContinue = str(reaction.emoji) == '✅'
+				if doContinue:
+					if "pause" in cmd:
+						stop_torrents(torrents)
+					elif "resume" in cmd:
+						resume_torrents(torrents)
+					else:
+						remove_torrents(torrents,delete_files="delete" in cmd)
 					
-				ops = ["pause","resume","remove","removedelete","pauseall","resumeall"]
-				opNames = ["paused","resumed","removed","removed and deleted","paused","resumed"]
-				opEmoji = ["⏸","▶️","❌","🗑","⏸","▶️"]
-				ops = {i:j for i,j in zip(ops,opNames)}
-				opEmoji = {i:j for i,j in zip(ops,opEmoji)}
-				await context.message.channel.send("{} Transfer{} {}".format(str(reaction.emoji),'s' if allOnly or len(torrents) > 1 else '', ops[cmd]))
-			else:
-				await context.message.channel.send("❌ Cancelled!")
+					ops = ["pause","resume","remove","removedelete","pauseall","resumeall"]
+					opNames = ["paused","resumed","removed","removed and deleted","paused","resumed"]
+					opEmoji = ["⏸","▶️","❌","🗑","⏸","▶️"]
+					ops = {i:j for i,j in zip(ops,opNames)}
+					opEmoji = {i:j for i,j in zip(ops,opEmoji)}
+					await context.message.channel.send("{} Transfer{} {}".format(str(reaction.emoji),'s' if allOnly or len(torrents) > 1 else '', ops[cmd]))
+				else:
+					await context.message.channel.send("❌ Cancelled!")
 @client.command(name='m', pass_context=True)
 async def m(context, *, content=""):
 	await modify(context, content=content)
+	
+@client.command(name='legend', pass_context=True)
+async def legend(context):
+	embed = discord.Embed(title='Symbol legend', color=0xb51a00)
+	embed.add_field(name="Status", value="🔻—downloading\n🌱—seeding\n🏁—finished\n⏸—paused\n🔁—any", inline=True)
+	embed.add_field(name="Error", value="✅—none\n⚠️—tracker  warning\n🌐—tracker  error\n🖥—local  error", inline=True)
+	embed.add_field(name="Metrics", value="⬇️—(total)  download  rate\n⬆️—(total)  upload  rate\n⏬—total  downloaded\n⏫—total  uploaded\n⚖️—seed  ratio", inline=True)
+	embed.add_field(name="Timeout", value="🐢—stalled\n🐇—running", inline=True)
+	embed.add_field(name="Tracker", value="🔒—private\n🔓—public", inline=True)
+	embed.add_field(name="Modifications", value="⏸—pause\n▶️—resume\n❌—remove\n🗑—remove  and  delete", inline=True)
+	await context.message.channel.send(embed=embed)
+	return
 
 client.remove_command('help')
 
@@ -790,6 +820,7 @@ async def help(context, *, content=""):
 			embed.add_field(name="List torrent transfers", value="*list current transfers with sorting, filtering, and search options*\n*ex.* `{0}list [OPTIONS]` or `{0}l [OPTIONS]`".format(BOT_PREFIX), inline=False)
 			embed.add_field(name="Add new torrent transfers", value="*add one or more specified torrents by magnet link or url to torrent file*\n*ex.* `{0}add TORRENT ...` or `{0}a TORRENT ...`".format(BOT_PREFIX), inline=False)
 			embed.add_field(name="Modify existing transfers", value="*pause, resume, remove, or remove and delete specified transfers*\n*ex.* `{0}modify [TORRENT]` or `{0}m [TORRENT]`".format(BOT_PREFIX), inline=False)
+			embed.add_field(name='Show legend', value='*prints legend showing the meaning of symbols used in the output of other commands*\n*ex.* `{0}legend`'.format(BOT_PREFIX), inline=False)
 			embed.add_field(name='Help - Gives this menu', value='*with optional details of specified command*\n*ex.* `{0}help` or `{0}help COMMAND`'.format(BOT_PREFIX), inline=False)
 		
 			await context.message.channel.send(embed=embed)
