@@ -10,7 +10,7 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 * Channel list to limit access to specified channel(s)
 * Complete management of transfers:
 	* `t/add URL` Add new torrent transfers via **URL to torrent file** or **magnet link**
-	* `t/list [OPTIONS]` List existing transfers with filtering, sorting, and searching by name
+	* `t/list [OPTIONS]` List existing transfers with filtering, sorting, and searching transfer names with regular expressions
 	* `t/modify [OPTIONS]` Modify (pause, resume, remove, or remove and delete) transfer(s) by transfer ID(s) or using `list` options
 	* `t/summary` Print simple summary of all transfers
 * In-channel documentation using `t/help [COMMAND]`
