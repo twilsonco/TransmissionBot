@@ -60,9 +60,11 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 * Command to print detailed information for transfer(s)
 	* Complete connection information
 	* Lists of transfer files, peers, trackers
+* Add ability to verify transfer data
 * Ability to specify which files to include in download (we'll see about that; sounds clunky but maybe using file ID specifiers *e.g.* `1,3-5,8`)
-* Notifications
-	* To the user that added the transfer
+* Notifications for when a transfer finishes/stalls/errors
+	* via DM to the user that added the transfer
+	* or by posting to the channel from which a transfer was added
 	* Let other users opt to receive notifications for transfers they *didn't* add
 * Post-download file management (*never going to happen...*)
 	* Compress files (encrypted) and make available for direct download from server
