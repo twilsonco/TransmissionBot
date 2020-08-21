@@ -64,8 +64,9 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 * When searching by name, update regex to include potential accented characters, eg `pokemon` would also match `pokémon`
 * Currently, searching by name is done with case-insensitive regex. Update to that if a user includes upper case characters, case-sensitive search is performed
 * Add recurring list option. Ie every five seconds replace `list` output with fresh output. This would be done by reacting to a "repeat" emoji to initiate repetition of the current search
-* Add additional filtering options: stalled, non-zero up/down rate.
-* Add a `top` command that's a combination of the above two features 
+* Add additional filtering options: stalled, error, non-zero up/down rate.
+* Add shorthand for filtering options (downloading/seeding/stalled/paused become d/s/i/p etc., that's i for "idle" since s is for seeding)
+* Add a `top` command that'sessentially a combination of the up/down rate filter and the repeating output features 
 * Ability to refine `list` output with filter or sort using reactions; ie click a filter or sort reaction which triggers another message with additional reactions to click to apply the extra filters or sort
 * Ability to specify which files to include in download (we'll see about that; sounds clunky but maybe using file ID specifiers *e.g.* `1,3-5,8`)
 * Notifications for when a transfer finishes/stalls/errors
