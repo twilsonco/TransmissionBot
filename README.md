@@ -62,6 +62,8 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 	* Lists of transfer files, peers, trackers
 * Add ability to verify transfer data
 * When searching by name, update regex to include potential accented characters, eg `pokemon` would also match `pokémon`
+* Specify number of transfers to show when using `list` or `modify`
+* Combine the `list` and `modify` commands in the code, with a simple parameter to specify whether or not modification is allowed
 * Currently, searching by name is done with case-insensitive regex. Update to that if a user includes upper case characters, case-sensitive search is performed
 * Add recurring list option. Ie every five seconds replace `list` output with fresh output. This would be done by reacting to a "repeat" emoji to initiate repetition of the current search
 * Add additional filtering options: stalled, error, non-zero up/down rate.
