@@ -18,10 +18,13 @@ import os
 from os.path import expanduser, join
 import re
 import datetime
+import time
 import pytz
 import platform
 import transmissionrpc
 import logging
+
+# BEGIN USER CONFIGURATION
 
 BOT_PREFIX = 't/'
 TOKEN = 'SECRET_TOKEN'
@@ -31,30 +34,73 @@ WHITELIST = [USER_IDS]
 CHANNEL_IDS=[CHANNEL_IDS]
 LOGO_URL="https://iyanovich.files.wordpress.com/2009/04/transmission-logo.png"
 
-
-
 TSCLIENT_CONFIG={
 	'host': "10.0.1.2",
 	'port': 9091,
 	'user': "USERNAME",
 	'password': "PASSWORD"
 }
+
 DRYRUN = False
+REPEAT_FREQ = 5 # time in seconds to wait between reprinting repeated commands (in addition to the time requred to delete old message(s) and add reactions)
+REPEAT_TIMEOUT = 45 # time in seconds before a repeated command automatically stops
 
 logging.basicConfig(format='%(asctime)s %(message)s',filename=join(expanduser("~"),'transmissionbot.log'))
 
+# END USER CONFIGURATION
 
+REPEAT_COMMAND = False
+REPEAT_MSG_LIST = []
+REPEAT_START_TIME = 0
 
 client = Bot(command_prefix=BOT_PREFIX)
 TSCLIENT = None
-
-
 
 logger = logging.getLogger('transmission_bot')
 logger.setLevel(logging.INFO)
 DEFAULT_REASON="TransmissionBot"
 
 # Begin transmissionrpc functions, lovingly taken from https://github.com/leighmacdonald/transmission_scripts
+
+filter_names = ( # these are the filters accepted by transmissionrpc
+	"all",
+	"active",
+	"downloading",
+	"seeding",
+	"stopped",
+	"finished"
+)
+
+filter_names_extra = ( # these are extra filters I've added
+	"stalled",
+	"private",
+	"public",
+	"error",
+	'err_none', 
+	'err_tracker_warn', 
+	'err_tracker_error', 
+	'err_local',
+	'verifying', 
+	'queued',
+	"running" # running means a non-zero transfer rate, not to be confused with "active"
+)
+
+filter_names_full = filter_names + filter_names_extra
+
+sort_names = (
+	"id",
+	"progress",
+	"name",
+	"size",
+	"ratio",
+	"speed",
+	"speed_up",
+	"speed_down",
+	"status",
+	"queue",
+	"age",
+	"activity"
+)
 
 class TSClient(transmissionrpc.Client):
 	""" Basic subclass of the standard transmissionrpc client which provides some simple
@@ -80,13 +126,29 @@ class TSClient(transmissionrpc.Client):
 		if id_list:
 			torrents = [tor for tor in torrents if tor.id in id_list]
 		if filter_by:
-			torrents = filter_torrents_by(torrents, key=getattr(Filter, filter_by))
+			for f in filter_by.split():
+				if f in filter_names:
+					torrents = filter_torrents_by(torrents, key=getattr(Filter, filter_by))
+				elif f == "verifying":
+					torrents = [t for t in torrents if "check" in t.status]
+				elif f == "queued":
+					torrents = [t for t in torrents if "load pending" in t.status]
+				elif f == "stalled":
+					torrents = [t for t in torrents if t.isStalled]
+				elif f == "private":
+					torrents = [t for t in torrents if t.isPrivate]
+				elif f == "public":
+					torrents = [t for t in torrents if not t.isPrivate]
+				elif f == "error":
+					torrents = [t for t in torrents if t.error != 0]
+				elif f == "running":
+					torrents = [t for t in torrents if t.rateDownload + t.rateUpload > 0]
+				else:
+					continue
 			if sort_by is None:
-				if filter_by == "downloading":
-					sort_by = "speed_down"
-				elif filter_by == "seeding":
-					sort_by = "speed_up"
-				elif filter_by in ["stopped","finished"]:
+				if "downloading" in filter_by or "seeding" in filter_by or "running" in filter_by:
+					sort_by = "speed"
+				elif "stopped" in filter_by or "finished" in filter_by:
 					sort_by = "ratio"
 		if sort_by:
 			torrents = sort_torrents_by(torrents, key=getattr(Sort, sort_by), reverse=reverse)
@@ -111,26 +173,18 @@ def make_client():
 	except:
 		return None
 
-filter_names = (
-	"all",
-	"active",
-	"downloading",
-	"seeding",
-	"stopped",
-	"finished"
-)
-
 class Filter(object):
 	"""A set of filtering operations that can be used against a list of torrent objects"""
 
-	names = (
-		"all",
-		"active",
-		"downloading",
-		"seeding",
-		"stopped",
-		"finished"
-	)
+	# names = (
+	# 	"all",
+	# 	"active",
+	# 	"downloading",
+	# 	"seeding",
+	# 	"stopped",
+	# 	"finished"
+	# )
+	names = filter_names
 
 	@staticmethod
 	def all(t):
@@ -174,38 +228,24 @@ def filter_torrents_by(torrents, key=Filter.all):
 			filtered_torrents.append(torrent)
 	return filtered_torrents
 	
-sort_names = (
-	"id",
-	"progress",
-	"name",
-	"size",
-	"ratio",
-	"speed",
-	"speed_up",
-	"speed_down",
-	"status",
-	"queue",
-	"age",
-	"activity"
-)
-	
 class Sort(object):
 	""" Defines methods for sorting torrent sequences """
 
-	names = (
-		"id",
-		"progress",
-		"name",
-		"size",
-		"ratio",
-		"speed",
-		"speed_up",
-		"speed_down",
-		"status",
-		"queue",
-		"age",
-		"activity"
-	)
+	# names = (
+	# 	"id",
+	# 	"progress",
+	# 	"name",
+	# 	"size",
+	# 	"ratio",
+	# 	"speed",
+	# 	"speed_up",
+	# 	"speed_down",
+	# 	"status",
+	# 	"queue",
+	# 	"age",
+	# 	"activity"
+	# )
+	names = sort_names
 
 	@staticmethod
 	def activity(t):
@@ -350,6 +390,23 @@ def resume_torrents(torrents=[], reason=DEFAULT_REASON):
 				TSCLIENT.start_torrent(torrent.hashString)
 			logger.info("Resumed: {} {}\n\tReason: {}\n\tDry run: {}".format(torrent.name, torrent.hashString, reason, DRYRUN))
 
+def verify_torrents(torrents=[]):
+	""" Verify a list of torrents from the client.
+
+	:param client: Transmission RPC Client
+	:type client: transmissionrpc.Client
+	:param torrent: Torrent instance to remove
+	:type torrent: transmissionrpc.Torrent
+	:type reason: str
+	:param dry_run: Do a dry run without actually running any commands
+	:type dry_run: bool
+	:return:
+	"""
+	for torrent in (torrents if len(torrents) > 0 else TSCLIENT.get_torrents()):
+		if not DRYRUN:
+			TSCLIENT.verify_torrent(torrent.hashString)
+		logger.info("Verified: {} {}\n\tDry run: {}".format(torrent.name, torrent.hashString, DRYRUN))
+
 def add_torrent(torStr):
 	tor = None
 	if torStr != "":
@@ -420,12 +477,13 @@ async def CommandPrecheck(context):
 		return False
 	return True
 				
-@client.command(name='add', pass_context=True)
+@client.command(name='add', aliases=['a'], pass_context=True)
 async def add(context, *, content):
 	if await CommandPrecheck(context):
 		if content == "":
 			await context.message.channel.send("Invalid string")
 		else:
+			await context.message.delete()
 			torStr = None
 			for t in content.strip().split(" "):
 				await context.message.channel.send('Adding torrent {}\n Please wait...'.format(t))
@@ -435,13 +493,10 @@ async def add(context, *, content):
 				else:
 					torStr = tor.name
 			await context.message.channel.send('✅ Added torrent{}:\n{}'.format("s" if len(content.strip().split(" ")) > 1 else "", torStr))
-@client.command(name='a', pass_context=True)
-async def a(context, *, content=""):
-	await add(context, content=content)
 	
 # def torInfo(t):
 # 	states = ('downloading', 'seeding', 'stopped', 'finished','all')
-# 	stateEmoji = {i:j for i,j in zip(states,['🔻','🌱','⏸','🏁','🔁'])}
+# 	stateEmoji = {i:j for i,j in zip(states,['🔻','🌱','⏸','🏁','↕️'])}
 #
 # 	downStr = humanbytes(t.progress * 0.01 * t.totalSize)
 # 	upStr = "{} (Ratio: {:.2f})".format(humanbytes(t.uploadedEver), t.uploadRatio)
@@ -454,21 +509,170 @@ async def a(context, *, content=""):
 # 		have = "{} ({:d}){}{}".format(humanbytes(t.totalSize), t.progress, '' if t.haveUnchecked == 0 else ', {} Unverified'.format(humanbytes(t.haveUnchecked)), '' if t.corruptEver == 0 else ', {} Corrupt'.format(humanbytes(t.corruptEver)))
 # 		avail = "100%"
 #
-#
-#
 # 	embed=discord.Embed(title=t.name,color=0xb51a00)
 #
 # 	return embed
 
+torStates = ('downloading', 'seeding', 'stopped', 'verifying', 'queued', 'finished', #0-5
+	'stalled', 'active', 'running', #6-8
+	'private', 'public', #9-10
+	'error', 'err_none', 'err_tracker_warn', 'err_tracker_error', 'err_local', # 11-
+)
+torStateEmoji = ('🔻','🌱','⏸','🩺','🚧','🏁',
+	'🐢','🐇','🚀',
+	'🔒','🔓',
+	'‼️','✅','⚠️','🌐','🖥'
+)
+torStateFilters = {i:"--filter {}".format(j) for i,j in zip(torStateEmoji,torStates)}
+torStateFilters['↕️']=''
 
-def torList(torrents, author_name="Torrent Transfers",title=None,description=None):
-	states = ('downloading', 'seeding', 'stopped', 'finished','all')
-	stateEmoji = {i:j for i,j in zip(states,['🔻','🌱','⏸','🏁','🔁'])}
+def numTorInState(torrents, state):
+	rpc_states = ('downloading', 'seeding', 'stopped', 'finished')
+	if state in rpc_states:
+		return len([True for t in torrents if t.status == state])
+	elif state =='verifying': # these are also rpc statuses, but I want to combine them.
+		return len([True for t in torrents if 'check' in t.status])
+	elif state == 'queued':
+		return len([True for t in torrents if 'load pending' in t.status])
+	elif state == 'stalled':
+		return len([True for t in torrents if t.isStalled])
+	elif state == 'active':
+		return len([True for t in torrents if not t.isStalled]) - len([True for t in torrents if t.rateDownload + t.rateUpload > 0])
+	elif state == 'running':
+		return len([True for t in torrents if t.rateDownload + t.rateUpload > 0])
+	elif state == 'private':
+		return len([True for t in torrents if t.isPrivate])
+	elif state == 'public':
+		return len([True for t in torrents if not t.isPrivate])
+	elif state == 'error':
+		return len([True for t in torrents if t.error != 0])
+	elif state == 'err_none':
+		return len([True for t in torrents if t.error == 0])
+	elif state == 'err_twarn':
+		return len([True for t in torrents if t.error == 1])
+	elif state == 'err_terr':
+		return len([True for t in torrents if t.error == 2])
+	elif state == 'err_local':
+		return len([True for t in torrents if t.error == 3])
+	else:
+		return 0
+
+def torSummary(torrents, repeat=False):
+	numInState = [numTorInState(torrents,s) for s in torStates]
+	numTot = len(torrents)
+	
+	sumTot = sum([t.totalSize for t in torrents])
+	totSize = humanbytes(sumTot)
+	totUpRate = humanbytes(sum([t.rateUpload for t in torrents]))
+	totDownRate = humanbytes(sum([t.rateDownload for t in torrents]))
+	
+	downList = [t.progress*0.01*t.totalSize for t in torrents]
+	upList = [t.ratio * j for t,j in zip(torrents,downList)]
+	
+	sumDown = sum(downList)
+	sumUp = sum(upList)
+	
+	totDown = humanbytes(sumDown)
+	totUp = humanbytes(sumUp)
+	
+	totRatio = '{:.2f}'.format(sumUp / sumDown)
+	
+	totDownRatio = '{:.2f}'.format(sumDown / sumTot * 100.0)
+	
+	numTopRatios = min([len(torrents),5])
+	topRatios = "• Top {} ratio{}:".format(numTopRatios,"s" if numTopRatios != 1 else "")
+	sortByRatio = sorted(torrents,key=lambda t:float(t.ratio),reverse=True)
+	for i in range(numTopRatios):
+		topRatios += "\n {:.1f} {:.35}{}".format(float(sortByRatio[i].ratio),sortByRatio[i].name,"..." if len(sortByRatio[i].name) > 35 else "")
+	
+	embed=discord.Embed(description="*React to see list of corresponding transfers*", color=0xb51a00)
+	embed.set_author(name="Torrent Summary 🌊", icon_url=LOGO_URL)
+	embed.add_field(name="⬇️ {}/s".format(totDownRate), value="⬆️ {}/s".format(totUpRate), inline=False)
+	embed.add_field(name="⏬ {} of {}".format(totDown,totSize), value="⏫ {}  ⚖️ {}".format(totUp,totRatio), inline=False)
+	embed.add_field(name="↕️ {} transfer{}".format(numTot, 's' if numTot != 1 else ''), value=' '.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[:6], numInState[:6])]), inline=False)
+	embed.add_field(name="{} Error{}".format(numInState[11], 's' if numInState[9] != 1 else ''), value='\n'.join(['{} {}'.format(i,"**{}**".format(j) if i != '✅' and j > 0 else j) for i,j in zip(torStateEmoji[12:], numInState[12:])]), inline=True)
+	embed.add_field(name="Activity", value='\n'.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[6:9], numInState[6:9])]), inline=True)
+	embed.add_field(name="Tracker", value='\n'.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[9:11], numInState[9:11])]), inline=True)
+	
+	embed.set_footer(text=topRatios+"\n📜 Symbol legend{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_FREQ,'s' if REPEAT_FREQ != 1 else '') if repeat else ', 🔄 to auto-update'))
+	# await context.message.channel.send(embed=embed)
+	return embed,numInState
+				
+@client.command(name='summary',aliases=['s'], pass_context=True)
+async def summary(context, *, content="", repeat=False):
+	global REPEAT_COMMAND, REPEAT_MSG_LIST
+	if await CommandPrecheck(context):
+		if not repeat:
+			await context.message.delete()
+		stateEmoji = ('📜','❎' if repeat else '🔄','↕️') + torStateEmoji
+		ignoreEmoji = ('✅')
+		
+		summaryData=torSummary(TSCLIENT.get_torrents(), repeat=repeat)
+		
+		if repeat:
+			msg = REPEAT_MSG_LIST[0]
+			await msg.edit(embed=summaryData[0])
+		else:
+			msg = await context.message.channel.send(embed=summaryData[0])
+		
+		msgRxns = [str(r.emoji) for r in msg.reactions]
+		
+		for i in stateEmoji[:2]:
+			if i not in msgRxns:
+				await msg.add_reaction(i)
+		for i in range(len(summaryData[1])):
+			if summaryData[1][i] > 0 and stateEmoji[i+3] not in ignoreEmoji and stateEmoji[i+3] not in msgRxns:
+				await msg.add_reaction(stateEmoji[i+3])
+			elif summaryData[1][i] == 0 and stateEmoji[i+3] in msgRxns:
+				await msg.clear_reaction(stateEmoji[i+3])
+		
+		def check(reaction, user):
+			return user == context.message.author and reaction.message.id == msg.id and str(reaction.emoji) in stateEmoji
+		
+		try:
+			reaction, user = await client.wait_for('reaction_add', timeout=60.0 if not repeat else REPEAT_FREQ, check=check)
+		except asyncio.TimeoutError:
+			pass
+		else:
+			if str(reaction.emoji) in stateEmoji[2:] and str(reaction.emoji) not in ignoreEmoji:
+				await list_transfers(context, content=torStateFilters[str(reaction.emoji)])
+			elif str(reaction.emoji) == stateEmoji[0]:
+				await legend(context)
+			elif str(reaction.emoji) == stateEmoji[1]:
+				if repeat:
+					REPEAT_COMMAND = False
+					REPEAT_MSG_LIST = []
+					await context.message.channel.send("❎ Auto-update cancelled...")
+				else:
+					REPEAT_MSG_LIST = [msg]
+					await msg.clear_reaction('🔄')
+					await repeat_command(summary, context=context, content=content)
+
+def strListToList(strList):
+	if not re.match('^[0-9\,\-]+$', strList):
+		return False
+	outList = []
+	for seg in strList.strip().split(","):
+		subseg = seg.split("-")
+		if len(subseg) == 1 and int(subseg[0]) not in outList:
+			outList.append(int(subseg[0]))
+		elif len(subseg) == 2:
+			subseg = sorted([int(i) for i in subseg])
+			outList += range(subseg[0],subseg[1]+1)
+	if len(outList) == 0:
+		return False
+	
+	return outList
+
+
+def torList(torrents, author_name="Torrent Transfers",title=None,description=None,repeat=False):
+	states = ('downloading', 'seeding', 'stopped', 'finished','checking','check pending','download pending','upload pending')
+	stateEmoji = {i:j for i,j in zip(states,['🔻','🌱','⏸','🏁','🩺','🩺','🚧','🚧'])}
 	errorStrs = ['✅','⚠️','🌐','🖥']
 
 	def torListLine(t):
 		down = humanbytes(t.progress * 0.01 * t.totalSize)
-		out = "{} {} {} {} ".format(stateEmoji[t.status],errorStrs[t.error],'🐢' if t.isStalled else '🐇', '🔒' if t.isPrivate else '🔓')
+		out = "{} {} {} {} ".format(stateEmoji[t.status],errorStrs[t.error],'🚀' if t.rateDownload + t.rateUpload > 0 else '🐢' if t.isStalled else '🐇', '🔒' if t.isPrivate else '🔓')
 		if t.status == 'downloading':
 			out += "{}/{} ⬇️ {}/s ⬆️ {}/s ⚖️ {:.2f}".format(down,humanbytes(t.totalSize),humanbytes(t.rateDownload),humanbytes(t.rateUpload),t.uploadRatio)
 		elif t.status == 'seeding':
@@ -477,6 +681,9 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 			out += "{}/{} ⚖️ {:.2f}".format(down,humanbytes(t.totalSize),t.uploadRatio)
 		elif t.status == 'finished':
 			out += "{} ⚖️ {:.2f}".format(humanbytes(t.totalSize),t.uploadRatio)
+		
+		if t.error != 0:
+			out += "\n**Error:** *{}*".format(t.errorString)
 		
 		return out
 	
@@ -542,133 +749,102 @@ def torGetListOpsFromStr(listOpStr):
 	if filter_regex == "":
 		filter_regex = None
 	
-	if filter_by is not None and filter_by not in filter_names:
+	if filter_by is not None and filter_by not in filter_names_full:
 		return -1, None, None
 	if sort_by is not None and sort_by not in sort_names:
 		return None, -1, None
 		
 	return filter_by, sort_by, filter_regex
 
-@client.command(name='list', pass_context=True)
-async def list(context, *, content=""):
+async def repeat_command(command, context, content=""):
+	global REPEAT_COMMAND, REPEAT_MSG_LIST
+	REPEAT_COMMAND = True
+	start_time = datetime.datetime.now()
+	while REPEAT_COMMAND:
+		delta = datetime.datetime.now() - start_time
+		if delta.seconds >= REPEAT_TIMEOUT:
+			await context.message.channel.send("❎ Auto-update timed out...")
+			REPEAT_COMMAND = False
+			REPEAT_MSG_LIST = []
+			return
+		# for msg in REPEAT_MSG_LIST:
+		# 	await msg.delete()
+		await command(context=context, content=content, repeat=True)
+	return
+
+@client.command(name='list', aliases=['l'], pass_context=True)
+async def list_transfers(context, *, content="", repeat=False):
+	global REPEAT_COMMAND, REPEAT_MSG_LIST
 	if await CommandPrecheck(context):
 		filter_by, sort_by, filter_regex = torGetListOpsFromStr(content)
 		if filter_by == -1:
-			await context.message.channel.send("Invalid filter specified. Choose one of {}".format(str(filter_names)))
+			await context.message.channel.send("Invalid filter specified. Choose one of {}".format(str(filter_names_full)))
 			return
 		if sort_by == -1:
 			await context.message.channel.send("Invalid sort specified. Choose one of {}".format(str(sort_names)))
 			return
 		
+		if not repeat:
+			await context.message.delete()
+		
 		torrents = TSCLIENT.get_torrents_by(sort_by=sort_by, filter_by=filter_by, filter_regex=filter_regex)
 		
 		embeds = torList(torrents, title="{} transfer{} matching '`{}`'".format(len(torrents),'' if len(torrents)==1 else 's',content))
 		
-		for e in embeds:
-			msg = await context.message.channel.send(embed=e)
+		embeds[-1].set_footer(text="📜 Symbol legend{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_FREQ,'s' if REPEAT_FREQ != 1 else '') if repeat else ', 🔄 to auto-update'))
 		
-		await msg.add_reaction('📜')
+		if repeat:
+			msgs = REPEAT_MSG_LIST
+			for i,e in enumerate(embeds):
+				if i < len(msgs):
+					await msgs[i].edit(embed=e)
+					if i < len(embeds) and len(msgs[i].reactions) > 0:
+						await msgs[i].clear_reactions()
+				else:
+					msgs.append(await context.message.channel.send(embed=e))
+			if len(msgs) > len(embeds):
+				for i in range(len(msgs) - len(embeds)):
+					await msgs[-1].delete()
+					del msgs[-1]
+			REPEAT_MSG_LIST = msgs
+			rxnEmoji = ['📜','❎']
+		else:
+			msgs = [await context.message.channel.send(embed=e) for e in embeds]
+			rxnEmoji = ['📜','🔄']
+		
+		msg = msgs[-1]
+		
+		msgRxns = msg.reactions
+		for r in msgRxns:
+			if str(r.emoji) not in rxnEmoji:
+				await msg.clear_reaction(r)
+		
+		msgRxns = [str(r.emoji) for r in msgRxns]
+		for e in rxnEmoji:
+			if e not in msgRxns:
+				await msg.add_reaction(e)
 		
 		def check(reaction, user):
-			return user == context.message.author and str(reaction.emoji) == '📜'
+			return user == context.message.author and reaction.message.id == msg.id and str(reaction.emoji) in rxnEmoji
 		
 		try:
-			reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check)
+			reaction, user = await client.wait_for('reaction_add', timeout=60.0 if not repeat else REPEAT_FREQ, check=check)
 		except asyncio.TimeoutError:
 			pass
 		else:
 			if str(reaction.emoji) == '📜':
 				await legend(context)
-@client.command(name='l', pass_context=True)
-async def l(context, *, content=""):
-	await list(context, content=content)
+			elif str(reaction.emoji) == rxnEmoji[-1]:
+				if repeat:
+					REPEAT_COMMAND = False
+					REPEAT_MSG_LIST = []
+					await context.message.channel.send("❎ Auto-update cancelled...")
+				else:
+					REPEAT_MSG_LIST = msgs
+					await msg.clear_reaction('🔄')
+					await repeat_command(list_transfers, context=context, content=content)
 
-def torSummary(torrents):
-	states = ('downloading', 'seeding', 'paused', 'finished')
-	numInState = [len([True for t in torrents if t.status == s]) for s in states]
-	numTot = len(torrents)
-	
-	sumTot = sum([t.totalSize for t in torrents])
-	totSize = humanbytes(sumTot)
-	totUpRate = humanbytes(sum([t.rateUpload for t in torrents]))
-	totDownRate = humanbytes(sum([t.rateDownload for t in torrents]))
-	
-	downList = [t.progress*0.01*t.totalSize for t in torrents]
-	upList = [t.ratio * j for t,j in zip(torrents,downList)]
-	
-	sumDown = sum(downList)
-	sumUp = sum(upList)
-	
-	totDown = humanbytes(sumDown)
-	totUp = humanbytes(sumUp)
-	
-	totRatio = '{:.2f}'.format(sumUp / sumDown)
-	
-	totDownRatio = '{:.2f}'.format(sumDown / sumTot * 100.0)
-	
-	numTopRatios = min([len(torrents),5])
-	topRatios = "• Top {} ratio{}:".format(numTopRatios,"s" if numTopRatios > 0 else "")
-	sortByRatio = sorted(torrents,key=lambda t:float(t.ratio),reverse=True)
-	for i in range(numTopRatios):
-		topRatios += "\n {:.1f} {:.35}{}".format(float(sortByRatio[i].ratio),sortByRatio[i].name,"..." if len(sortByRatio[i].name) > 35 else "")
-	
-	embed=discord.Embed(title="🌊 Torrent Summary", description="*React to see list of corresponding transfers*", color=0xb51a00)
-	embed.set_thumbnail(url=LOGO_URL)
-	embed.add_field(name="⬇️ {}/s".format(totDownRate), value="⬆️ {}/s".format(totUpRate), inline=False)
-	embed.add_field(name="⏬ {} of {}".format(totDown,totSize), value="⏫ {}  ⚖️ {}".format(totUp,totRatio), inline=False)
-	embed.add_field(name="🔁 {} transfer{} total".format(numTot,"" if numTot == 0 else "s"), value="🔻 {} 🌱 {} 🏁 {} ⏸ {}".format(numInState[0],numInState[1],numInState[3],numInState[2]), inline=False)
-	embed.set_footer(text=topRatios+"\n📜 Symbol legend")
-	# await context.message.channel.send(embed=embed)
-	return embed,numInState
-				
-@client.command(name='summary', pass_context=True)
-async def summary(context, *, content=""):
-	if await CommandPrecheck(context):
-		states = ('downloading', 'seeding', 'paused', 'finished','all')
-		stateEmoji = ['🔻','🌱','⏸','🏁','🔃','📜']
-		
-		summary=torSummary(TSCLIENT.get_torrents())
-		msg = await context.message.channel.send(embed=summary[0])
-		for i in range(len(summary[1])):
-			if summary[1][i] > 0:
-				await msg.add_reaction(stateEmoji[i])
-		for i in stateEmoji[-2:]:
-			await msg.add_reaction(i)
-		
-		def check(reaction, user):
-			return user == context.message.author and str(reaction.emoji) in stateEmoji
-		
-		try:
-			reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check)
-		except asyncio.TimeoutError:
-			pass
-		else:
-			if str(reaction.emoji) in stateEmoji[:-1]:
-				cmds = {i:j for i,j in zip(stateEmoji,('--filter downloading', '--filter seeding', '--filter stopped', '--filter finished', ''))}
-				await list(context, content=cmds[str(reaction.emoji)])
-			elif str(reaction.emoji) == stateEmoji[-1]:
-				await legend(context)
-@client.command(name='s', pass_context=True)
-async def s(context, *, content=""):
-	await summary(context, content=content)
-
-def strListToList(strList):
-	if not re.match('^[0-9\,\-]+$', strList):
-		return False
-	outList = []
-	for seg in strList.strip().split(","):
-		subseg = seg.split("-")
-		if len(subseg) == 1 and int(subseg[0]) not in outList:
-			outList.append(int(subseg[0]))
-		elif len(subseg) == 2:
-			subseg = sorted([int(i) for i in subseg])
-			outList += range(subseg[0],subseg[1]+1)
-	if len(outList) == 0:
-		return False
-	
-	return outList
-
-@client.command(name='modify', pass_context=True)
+@client.command(name='modify', aliases=['m'], pass_context=True)
 async def modify(context, *, content=""):
 	if await CommandPrecheck(context):
 		allOnly = content.strip() == ""
@@ -681,27 +857,28 @@ async def modify(context, *, content=""):
 			if not id_list:
 				filter_by, sort_by, filter_regex = torGetListOpsFromStr(content)
 				if filter_by == -1:
-					await context.message.channel.send("Invalid filter specified. Choose one of {}".format(str(filter_names)))
+					await context.message.channel.send("Invalid filter specified. Choose one of {}".format(str(filter_names_full)))
 					return
 				if sort_by == -1:
 					await context.message.channel.send("Invalid sort specified. Choose one of {}".format(str(sort_names)))
 					return
-			# await context.message.channel.send("{} {} {} {}".format())
-			# return
+					
+			await context.message.delete()
+			
 			torrents = TSCLIENT.get_torrents_by(filter_by=filter_by, sort_by=sort_by, filter_regex=filter_regex, id_list=id_list)
 
 			if len(torrents) > 0:
-				ops = ["pause","resume","remove","removedelete"]
-				opNames = ["pause","resume","remove","remove and delete"]
-				opEmoji = ['⏸','▶️','❌','🗑']
-				opStr = "⏸pause ▶️resume ❌remove 🗑remove  and  delete"
+				ops = ["pause","resume","remove","removedelete","verify"]
+				opNames = ["pause","resume","remove","remove and delete","verify"]
+				opEmoji = ['⏸','▶️','❌','🗑','🩺']
+				opStr = "⏸pause ▶️resume ❌remove 🗑remove  and  delete 🩺verify"
 				embeds = torList(torrents,author_name="Click a reaction to choose modification".format(len(torrents), '' if len(torrents)==1 else 's'),title="{} transfer{} matching '`{}`' will be modified".format(len(torrents), '' if len(torrents)==1 else 's', content))
-				# embeds[-1].set_footer(text=opStr)
 			else:
 				embed=discord.Embed(title="Modify transfers",color=0xb51a00)
 				embed.set_author(name="No matching transfers found!", icon_url=LOGO_URL)
 				embeds = [embed]
 		else:
+			await context.message.delete()
 			ops = ["pauseall","resumeall"]
 			opNames = ["pause all","resume all"]
 			opEmoji = ['⏸','▶️']
@@ -732,7 +909,9 @@ async def modify(context, *, content=""):
 				await legend(context)
 			elif str(reaction.emoji) in opEmoji[:-1]:
 				cmds = {i:j for i,j in zip(opEmoji,ops)}
+				cmdNames = {i:j for i,j in zip(opEmoji,opNames)}
 				cmd = cmds[str(reaction.emoji)]
+				cmdName = cmdNames[str(reaction.emoji)]
 			
 				doContinue = True
 				if "remove" in cmds[str(reaction.emoji)]:
@@ -752,34 +931,34 @@ async def modify(context, *, content=""):
 					else:
 						doContinue = str(reaction.emoji) == '✅'
 				if doContinue:
+					await context.message.channel.send("{} Trying to {} transfer{}, please wait...".format(str(reaction.emoji), cmdName, 's' if allOnly or len(torrents) > 1 else ''))
 					if "pause" in cmd:
 						stop_torrents(torrents)
 					elif "resume" in cmd:
 						resume_torrents(torrents)
+					elif "verify" in cmd:
+						verify_torrents(torrents)
 					else:
 						remove_torrents(torrents,delete_files="delete" in cmd)
 					
-					ops = ["pause","resume","remove","removedelete","pauseall","resumeall"]
-					opNames = ["paused","resumed","removed","removed and deleted","paused","resumed"]
-					opEmoji = ["⏸","▶️","❌","🗑","⏸","▶️"]
+					ops = ["pause","resume","remove","removedelete","pauseall","resumeall","verify"]
+					opNames = ["paused","resumed","removed","removed and deleted","paused","resumed","queued for verification"]
+					opEmoji = ["⏸","▶️","❌","🗑","⏸","▶️","🩺"]
 					ops = {i:j for i,j in zip(ops,opNames)}
 					opEmoji = {i:j for i,j in zip(ops,opEmoji)}
 					await context.message.channel.send("{} Transfer{} {}".format(str(reaction.emoji),'s' if allOnly or len(torrents) > 1 else '', ops[cmd]))
 				else:
 					await context.message.channel.send("❌ Cancelled!")
-@client.command(name='m', pass_context=True)
-async def m(context, *, content=""):
-	await modify(context, content=content)
 	
 @client.command(name='legend', pass_context=True)
 async def legend(context):
 	embed = discord.Embed(title='Symbol legend', color=0xb51a00)
-	embed.add_field(name="Status", value="🔻—downloading\n🌱—seeding\n🏁—finished\n⏸—paused\n🔁—any", inline=True)
+	embed.add_field(name="Status", value="🔻—downloading\n🌱—seeding\n⏸—paused\n🩺—verifying\n🚧—queued\n🏁—finished\n↕️—any", inline=True)
 	embed.add_field(name="Error", value="✅—none\n⚠️—tracker  warning\n🌐—tracker  error\n🖥—local  error", inline=True)
-	embed.add_field(name="Metrics", value="⬇️—(total)  download  rate\n⬆️—(total)  upload  rate\n⏬—total  downloaded\n⏫—total  uploaded\n⚖️—seed  ratio", inline=True)
-	embed.add_field(name="Timeout", value="🐢—stalled\n🐇—running", inline=True)
+	embed.add_field(name="Metrics", value="⬇️—download  rate\n⬆️—upload  rate\n⏬—total  downloaded\n⏫—total  uploaded\n⚖️—seed  ratio", inline=True)
+	embed.add_field(name="Activity", value="🐢—stalled\n🐇—active\n🚀—running (rate>0)", inline=True)
 	embed.add_field(name="Tracker", value="🔒—private\n🔓—public", inline=True)
-	embed.add_field(name="Modifications", value="⏸—pause\n▶️—resume\n❌—remove\n🗑—remove  and  delete", inline=True)
+	embed.add_field(name="Modifications", value="⏸—pause\n▶️—resume\n❌—remove\n🗑—remove  and  delete\n🩺—verify", inline=True)
 	await context.message.channel.send(embed=embed)
 	return
 
@@ -793,7 +972,7 @@ async def help(context, *, content=""):
 				embed = discord.Embed(title='List transfers', color=0xb51a00)
 				embed.set_author(name="List current transfers with sorting, filtering, and search options", icon_url=LOGO_URL)
 				embed.add_field(name="Usage", value='`{0}list [--filter FILTER] [--sort SORT] [NAME]`'.format(BOT_PREFIX), inline=False)
-				embed.add_field(name="Filtering", value='`--filter FILTER` or `-f FILTER`\n`FILTER` is one of `{}`'.format(str(filter_names)), inline=False)
+				embed.add_field(name="Filtering", value='`--filter FILTER` or `-f FILTER`\n`FILTER` is one of `{}`'.format(str(filter_names_full)), inline=False)
 				embed.add_field(name="Sorting", value='`--sort SORT` or `-s SORT`\n`SORT` is one of `{}`'.format(str(sort_names)), inline=False)
 				embed.add_field(name="Searching by name", value='`NAME` is a regular expression used to search transfer names (no enclosing quotes; may contain spaces)', inline=False)
 				embed.add_field(name="Examples", value="*List all transfers:* `{0}list`\n*Search using phrase 'ubuntu':* `{0}l ubuntu`\n*List downloading transfers:* `{0}l -f downloading`\n*Sort transfers by age:* `{0}list --sort age`".format(BOT_PREFIX), inline=False)
