@@ -43,7 +43,7 @@ TSCLIENT_CONFIG={
 
 DRYRUN = False
 REPEAT_FREQ = 5 # time in seconds to wait between reprinting repeated commands (in addition to the time requred to delete old message(s) and add reactions)
-REPEAT_TIMEOUT = 45 # time in seconds before a repeated command automatically stops
+REPEAT_TIMEOUT = 1800 # time in seconds before a repeated command automatically stops
 
 logging.basicConfig(format='%(asctime)s %(message)s',filename=join(expanduser("~"),'transmissionbot.log'))
 
