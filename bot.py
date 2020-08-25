@@ -18,7 +18,6 @@ import os
 from os.path import expanduser, join
 import re
 import datetime
-import time
 import pytz
 import platform
 import transmissionrpc
@@ -42,8 +41,8 @@ TSCLIENT_CONFIG={
 }
 
 DRYRUN = False
-REPEAT_FREQ = 5 # time in seconds to wait between reprinting repeated commands (in addition to the time requred to delete old message(s) and add reactions)
-REPEAT_TIMEOUT = 1800 # time in seconds before a repeated command automatically stops
+REPEAT_FREQ = 2 # time in seconds to wait between reprinting repeated commands (in addition to the time requred to delete old message(s) and add reactions)
+REPEAT_TIMEOUT = 3600 # time in seconds before a repeated command automatically stops
 
 logging.basicConfig(format='%(asctime)s %(message)s',filename=join(expanduser("~"),'transmissionbot.log'))
 
@@ -611,11 +610,18 @@ async def summary(context, *, content="", repeat=False):
 		
 		if repeat:
 			msg = REPEAT_MSG_LIST[0]
-			await msg.edit(embed=summaryData[0])
+			if context.message.channel.last_message_id != msg.id:
+				await msg.delete()
+				msg = await context.message.channel.send(embed=summaryData[0])
+				REPEAT_MSG_LIST = [msg]
+			else:
+				await msg.edit(embed=summaryData[0])
 		else:
 			msg = await context.message.channel.send(embed=summaryData[0])
 		
-		msgRxns = [str(r.emoji) for r in msg.reactions]
+		# to get actual list of reactions, need to re-fetch the message from the server
+		cache_msg = await context.message.channel.fetch_message(msg.id)
+		msgRxns = [str(r.emoji) for r in cache_msg.reactions]
 		
 		for i in stateEmoji[:2]:
 			if i not in msgRxns:
@@ -635,6 +641,10 @@ async def summary(context, *, content="", repeat=False):
 			pass
 		else:
 			if str(reaction.emoji) in stateEmoji[2:] and str(reaction.emoji) not in ignoreEmoji:
+				if repeat:
+					REPEAT_COMMAND = False
+					REPEAT_MSG_LIST = []
+					await context.message.channel.send("❎ Auto-update cancelled...")
 				await list_transfers(context, content=torStateFilters[str(reaction.emoji)])
 			elif str(reaction.emoji) == stateEmoji[0]:
 				await legend(context)
@@ -644,9 +654,8 @@ async def summary(context, *, content="", repeat=False):
 					REPEAT_MSG_LIST = []
 					await context.message.channel.send("❎ Auto-update cancelled...")
 				else:
-					REPEAT_MSG_LIST = [msg]
 					await msg.clear_reaction('🔄')
-					await repeat_command(summary, context=context, content=content)
+					await repeat_command(summary, context=context, content=content, msg_list=[msg])
 
 def strListToList(strList):
 	if not re.match('^[0-9\,\-]+$', strList):
@@ -756,9 +765,13 @@ def torGetListOpsFromStr(listOpStr):
 		
 	return filter_by, sort_by, filter_regex
 
-async def repeat_command(command, context, content=""):
+async def repeat_command(command, context, content="", msg_list=[]):
 	global REPEAT_COMMAND, REPEAT_MSG_LIST
+	if REPEAT_COMMAND:
+		await context.message.channel.send("❎ Can't start auto-update when another command is already auto-updating...")
+		return
 	REPEAT_COMMAND = True
+	REPEAT_MSG_LIST = msg_list
 	start_time = datetime.datetime.now()
 	while REPEAT_COMMAND:
 		delta = datetime.datetime.now() - start_time
@@ -795,6 +808,10 @@ async def list_transfers(context, *, content="", repeat=False):
 		
 		if repeat:
 			msgs = REPEAT_MSG_LIST
+			if context.message.channel.last_message_id != msgs[-1].id:
+				for m in msgs:
+					await m.delete()
+			msgs = []
 			for i,e in enumerate(embeds):
 				if i < len(msgs):
 					await msgs[i].edit(embed=e)
@@ -840,9 +857,8 @@ async def list_transfers(context, *, content="", repeat=False):
 					REPEAT_MSG_LIST = []
 					await context.message.channel.send("❎ Auto-update cancelled...")
 				else:
-					REPEAT_MSG_LIST = msgs
 					await msg.clear_reaction('🔄')
-					await repeat_command(list_transfers, context=context, content=content)
+					await repeat_command(list_transfers, context=context, content=content, msg_list=msgs)
 
 @client.command(name='modify', aliases=['m'], pass_context=True)
 async def modify(context, *, content=""):
@@ -960,6 +976,8 @@ async def legend(context):
 	embed.add_field(name="Tracker", value="🔒—private\n🔓—public", inline=True)
 	embed.add_field(name="Modifications", value="⏸—pause\n▶️—resume\n❌—remove\n🗑—remove  and  delete\n🩺—verify", inline=True)
 	await context.message.channel.send(embed=embed)
+	if REPEAT_COMMAND:
+		await asyncio.sleep(5)
 	return
 
 client.remove_command('help')
