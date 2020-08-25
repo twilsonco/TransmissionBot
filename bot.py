@@ -482,7 +482,10 @@ async def add(context, *, content):
 		if content == "":
 			await context.message.channel.send("Invalid string")
 		else:
-			await context.message.delete()
+			try:
+				await context.message.delete()
+			except:
+				pass
 			torStr = None
 			for t in content.strip().split(" "):
 				await context.message.channel.send('Adding torrent {}\n Please wait...'.format(t))
@@ -602,7 +605,10 @@ async def summary(context, *, content="", repeat=False):
 	global REPEAT_COMMAND, REPEAT_MSG_LIST
 	if await CommandPrecheck(context):
 		if not repeat:
-			await context.message.delete()
+			try:
+				await context.message.delete()
+			except:
+				pass
 		stateEmoji = ('📜','❎' if repeat else '🔄','↕️') + torStateEmoji
 		ignoreEmoji = ('✅')
 		
@@ -656,6 +662,13 @@ async def summary(context, *, content="", repeat=False):
 				else:
 					await msg.clear_reaction('🔄')
 					await repeat_command(summary, context=context, content=content, msg_list=[msg])
+		if repeat: # a final check to see if the user has cancelled the repeat by checking the count of the cancel reaction
+			cache_msg = await context.message.channel.fetch_message(msg.id)
+			for r in cache_msg.reactions:
+				if str(r.emoji) == '❎' and r.count > 1:
+					REPEAT_COMMAND = False
+					REPEAT_MSG_LIST = []
+					await context.message.channel.send("❎ Auto-update cancelled...")
 
 def strListToList(strList):
 	if not re.match('^[0-9\,\-]+$', strList):
@@ -779,6 +792,7 @@ async def repeat_command(command, context, content="", msg_list=[]):
 			await context.message.channel.send("❎ Auto-update timed out...")
 			REPEAT_COMMAND = False
 			REPEAT_MSG_LIST = []
+			start_time = 0
 			return
 		# for msg in REPEAT_MSG_LIST:
 		# 	await msg.delete()
@@ -798,7 +812,10 @@ async def list_transfers(context, *, content="", repeat=False):
 			return
 		
 		if not repeat:
-			await context.message.delete()
+			try:
+				await context.message.delete()
+			except:
+				pass
 		
 		torrents = TSCLIENT.get_torrents_by(sort_by=sort_by, filter_by=filter_by, filter_regex=filter_regex)
 		
@@ -811,12 +828,13 @@ async def list_transfers(context, *, content="", repeat=False):
 			if context.message.channel.last_message_id != msgs[-1].id:
 				for m in msgs:
 					await m.delete()
-			msgs = []
+				msgs = []
 			for i,e in enumerate(embeds):
 				if i < len(msgs):
 					await msgs[i].edit(embed=e)
-					if i < len(embeds) and len(msgs[i].reactions) > 0:
-						await msgs[i].clear_reactions()
+					cache_msg = await context.message.channel.fetch_message(msgs[i].id)
+					if i < len(embeds) - 1 and len(cache_msg.reactions) > 0:
+						await cache_msg.clear_reactions()
 				else:
 					msgs.append(await context.message.channel.send(embed=e))
 			if len(msgs) > len(embeds):
@@ -831,12 +849,10 @@ async def list_transfers(context, *, content="", repeat=False):
 		
 		msg = msgs[-1]
 		
-		msgRxns = msg.reactions
-		for r in msgRxns:
-			if str(r.emoji) not in rxnEmoji:
-				await msg.clear_reaction(r)
+		# to get actual list of reactions, need to re-fetch the message from the server
+		cache_msg = await context.message.channel.fetch_message(msg.id)
+		msgRxns = [str(r.emoji) for r in cache_msg.reactions]
 		
-		msgRxns = [str(r.emoji) for r in msgRxns]
 		for e in rxnEmoji:
 			if e not in msgRxns:
 				await msg.add_reaction(e)
@@ -859,6 +875,13 @@ async def list_transfers(context, *, content="", repeat=False):
 				else:
 					await msg.clear_reaction('🔄')
 					await repeat_command(list_transfers, context=context, content=content, msg_list=msgs)
+		if repeat: # a final check to see if the user has cancelled the repeat by checking the count of the cancel reaction
+			cache_msg = await context.message.channel.fetch_message(msg.id)
+			for r in cache_msg.reactions:
+				if str(r.emoji) == '❎' and r.count > 1:
+					REPEAT_COMMAND = False
+					REPEAT_MSG_LIST = []
+					await context.message.channel.send("❎ Auto-update cancelled...")
 
 @client.command(name='modify', aliases=['m'], pass_context=True)
 async def modify(context, *, content=""):
@@ -879,7 +902,10 @@ async def modify(context, *, content=""):
 					await context.message.channel.send("Invalid sort specified. Choose one of {}".format(str(sort_names)))
 					return
 					
-			await context.message.delete()
+			try:
+				await context.message.delete()
+			except:
+				pass
 			
 			torrents = TSCLIENT.get_torrents_by(filter_by=filter_by, sort_by=sort_by, filter_regex=filter_regex, id_list=id_list)
 
@@ -894,7 +920,10 @@ async def modify(context, *, content=""):
 				embed.set_author(name="No matching transfers found!", icon_url=LOGO_URL)
 				embeds = [embed]
 		else:
-			await context.message.delete()
+			try:
+				await context.message.delete()
+			except:
+				pass
 			ops = ["pauseall","resumeall"]
 			opNames = ["pause all","resume all"]
 			opEmoji = ['⏸','▶️']
@@ -1025,13 +1054,19 @@ async def help(context, *, content=""):
 @client.event
 async def on_command_error(context, error):
 	if isinstance(error, commands.CommandOnCooldown):
-		await context.message.delete()
+		try:
+			await context.message.delete()
+		except:
+			pass
 		embed = discord.Embed(title="Error!", description='This command is on a {:.2f}s cooldown'.format(error.retry_after), color=0xb51a00)
 		message = await context.message.channel.send(embed=embed)
 		await asyncio.sleep(5)
 		await message.delete()
 	elif isinstance(error, commands.CommandNotFound):
-		await context.message.delete()
+		try:
+			await context.message.delete()
+		except:
+			pass
 		embed = discord.Embed(title="Error!", description="I don't know that command!", color=0xb51a00)
 		message = await context.message.channel.send(embed=embed)
 		await asyncio.sleep(2)
