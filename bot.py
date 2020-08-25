@@ -652,23 +652,38 @@ async def summary(context, *, content="", repeat=False):
 					REPEAT_MSG_LIST = []
 					await context.message.channel.send("❎ Auto-update cancelled...")
 				await list_transfers(context, content=torStateFilters[str(reaction.emoji)])
+				return
 			elif str(reaction.emoji) == stateEmoji[0]:
 				await legend(context)
+				return
 			elif str(reaction.emoji) == stateEmoji[1]:
 				if repeat:
 					REPEAT_COMMAND = False
 					REPEAT_MSG_LIST = []
 					await context.message.channel.send("❎ Auto-update cancelled...")
+					return
 				else:
 					await msg.clear_reaction('🔄')
 					await repeat_command(summary, context=context, content=content, msg_list=[msg])
+					return
 		if repeat: # a final check to see if the user has cancelled the repeat by checking the count of the cancel reaction
 			cache_msg = await context.message.channel.fetch_message(msg.id)
 			for r in cache_msg.reactions:
 				if str(r.emoji) == '❎' and r.count > 1:
-					REPEAT_COMMAND = False
-					REPEAT_MSG_LIST = []
-					await context.message.channel.send("❎ Auto-update cancelled...")
+					async for user in r.users():
+						if user.id == context.message.author.id:
+							REPEAT_COMMAND = False
+							REPEAT_MSG_LIST = []
+							await context.message.channel.send("❎ Auto-update cancelled...")
+							return
+				elif str(r.emoji) in stateEmoji[2:] and r.count > 1:
+					async for user in r.users():
+						if user.id == context.message.author.id:
+							REPEAT_COMMAND = False
+							REPEAT_MSG_LIST = []
+							await context.message.channel.send("❎ Auto-update cancelled...")
+							await list_transfers(context, content=torStateFilters[str(r.emoji)])
+							return
 
 def strListToList(strList):
 	if not re.match('^[0-9\,\-]+$', strList):
@@ -875,13 +890,17 @@ async def list_transfers(context, *, content="", repeat=False):
 				else:
 					await msg.clear_reaction('🔄')
 					await repeat_command(list_transfers, context=context, content=content, msg_list=msgs)
+					return
 		if repeat: # a final check to see if the user has cancelled the repeat by checking the count of the cancel reaction
 			cache_msg = await context.message.channel.fetch_message(msg.id)
 			for r in cache_msg.reactions:
 				if str(r.emoji) == '❎' and r.count > 1:
-					REPEAT_COMMAND = False
-					REPEAT_MSG_LIST = []
-					await context.message.channel.send("❎ Auto-update cancelled...")
+					async for user in r.users():
+						if user.id == context.message.author.id:
+							REPEAT_COMMAND = False
+							REPEAT_MSG_LIST = []
+							await context.message.channel.send("❎ Auto-update cancelled...")
+							return
 
 @client.command(name='modify', aliases=['m'], pass_context=True)
 async def modify(context, *, content=""):
@@ -992,8 +1011,10 @@ async def modify(context, *, content=""):
 					ops = {i:j for i,j in zip(ops,opNames)}
 					opEmoji = {i:j for i,j in zip(ops,opEmoji)}
 					await context.message.channel.send("{} Transfer{} {}".format(str(reaction.emoji),'s' if allOnly or len(torrents) > 1 else '', ops[cmd]))
+					return
 				else:
 					await context.message.channel.send("❌ Cancelled!")
+					return
 	
 @client.command(name='legend', pass_context=True)
 async def legend(context):
