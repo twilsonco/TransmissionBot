@@ -17,7 +17,7 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 * In-channel documentation using `t/help [COMMAND]`
 
 ## Example images
-* Transfer summary
+* Transfer summary (and symbol legend)
 
 ![summary](https://github.com/twilsonco/TransmissionBot/blob/master/out-summary1.png)
 
