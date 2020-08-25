@@ -57,7 +57,7 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 		* Optionally disable logging by setting the log level to `logger.CRITICAL` which isn't used anywhere
 3. Run with `python3 /path/to/TransmissionBot/bot.py` and enjoy!
 
-## To-do
+## To-do (~~implemented~~)
 * Command to print detailed information for transfer(s)
 	* Complete connection information
 	* Lists of transfer files, peers, trackers
