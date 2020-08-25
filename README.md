@@ -19,7 +19,7 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 ## Example images
 * Transfer summary
 
-![summary](https://github.com/twilsonco/TransmissionBot/blob/master/out-summary.png)
+![summary](https://github.com/twilsonco/TransmissionBot/blob/master/out-summary1.png)
 
 * Modifying existing transfers
 
