@@ -78,6 +78,8 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 	* Let other users opt to receive notifications for transfers they *didn't* add
 * Post-download file management (*never going to happen...*)
 	* Compress files (encrypted) and make available for direct download from server via download link posted to channel or DM'd to user
+* Use JSON config file so that updating is non-destructive
+* Add `set` command so owners can edit configuration through Discord
 
 ## Author(s)
 
