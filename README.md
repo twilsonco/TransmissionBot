@@ -80,6 +80,7 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 	* Compress files (encrypted) and make available for direct download from server via download link posted to channel or DM'd to user
 * Use JSON config file so that updating is non-destructive
 * Add `set` command so owners can edit configuration through Discord
+* Add a toggle for minimalised output for better display on mobile devices. Toggle using `t/compact` as standalone command or by clicking a 📱 reaction. Store as global variable so all commands output can be affected. 
 
 ## Author(s)
 
