@@ -4,17 +4,22 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 
 ## Features
 * Completely self-contained: Get the python dependencies, configure a single python file, and run
-* Use of `Embeds` for pretty output
-* Uses reactions in lieu of text input where appropriate
-* User whitelist and blacklist to control access
-* Channel list to limit access to specified channel(s)
 * Complete management of transfers:
 	* `t/add URL` Add new torrent transfers via **URL to torrent file** or **magnet link**
-	* `t/list [OPTIONS]` List existing transfers with filtering, sorting, and searching transfer names with regular expressions
-	* `t/modify [OPTIONS]` Modify (pause, resume, remove, remove and delete, or verify data) transfer(s) by transfer ID(s) or using `list` options
+	* `t/list [OPTIONS]` List existing transfers with filtering, sorting, and searching transfer names with regular expressions or transfer ID(s)
+	* `t/modify [OPTIONS]` Modify (pause, resume, remove, remove and delete, or verify data) transfer(s) specified using `list`'s options
 	* `t/summary` Print simple summary of all transfers
-* Auto-update output for `summary` and `list` commands
-* In-channel documentation using `t/help [COMMAND]`
+* User-friendly and attractive interface
+	* In-channel documentation using `t/help [COMMAND]`
+	* Use of `embeds` where appropriate
+	* Uses reactions in lieu of text input where appropriate
+	* Output automatically formatted to look good on desktop/mobile clients
+		* Can toggle override using `t/compact`
+	* Auto-update output for `summary` and `list` commands
+		* Simultaneous auto-update output messages supported
+		* An auto-update output message can be reprinted to the bottom of the channel by clicking its "🖨" reaction
+* User whitelist and blacklist to control access
+* Channel list to limit access to specified channel(s)
 
 ## Example images
 * Transfer summary (and symbol legend)
