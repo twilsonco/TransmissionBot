@@ -3,7 +3,7 @@ Copyright © twilsonco 2020
 Description:
 This is a discord bot to manage torrent transfers through the Transmission transmissionrpc python library.
 
-Version: 1.0
+Version: 1.1
 """
 
 import discord
@@ -15,13 +15,17 @@ from discord.ext.commands import Bot
 from discord.ext import commands
 from platform import python_version
 import os
+import sys
 from os.path import expanduser, join
 import re
 import datetime
 import pytz
 import platform
+import secrets
 import transmissionrpc
 import logging
+import base64
+from enum import Enum
 
 # BEGIN USER CONFIGURATION
 
@@ -43,15 +47,39 @@ TSCLIENT_CONFIG={
 DRYRUN = False
 REPEAT_FREQ = 2 # time in seconds to wait between reprinting repeated commands (in addition to the time requred to delete old message(s) and add reactions)
 REPEAT_TIMEOUT = 3600 # time in seconds before a repeated command automatically stops
+REPEAT_TIMEOUT_VERBOSE = True # if true, print a message when a repeated message times out
+REPEAT_CANCEL_VERBOSE = True # same but for when user cancels a repeated message
 
 logging.basicConfig(format='%(asctime)s %(message)s',filename=join(expanduser("~"),'transmissionbot.log'))
 
 # END USER CONFIGURATION
 
+class OutputMode(Enum):
+	AUTO = 1
+	DESKTOP = 2
+	MOBILE = 3
+	
+OUTPUT_MODE = OutputMode.AUTO
+
 COMPACT_OUTPUT = False
-REPEAT_COMMAND = False
-REPEAT_MSG_LIST = []
-REPEAT_START_TIME = 0
+
+REPEAT_MSG_IS_PINNED = False
+REPEAT_MSGS = {}
+	# REPEAT_MSGS[msg_key] = {
+	# 	'msgs':msg_list,
+	# 	'command':command,
+	# 	'context':context,
+	# 	'content':content,
+	# 	'pin_to_bottom':False,
+	# 	'reprint': False,
+	# 	'freq':REPEAT_FREQ,
+	# 	'timeout':REPEAT_TIMEOUT,
+	# 	'timeout_verbose':REPEAT_TIMEOUT_VERBOSE,
+	# 	'cancel_verbose':REPEAT_CANCEL_VERBOSE,
+	# 	'start_time':datetime.datetime.now(),
+	# 	'do_repeat':True
+	# }
+
 
 client = Bot(command_prefix=BOT_PREFIX)
 TSCLIENT = None
@@ -436,6 +464,32 @@ async def on_ready():
 		print("Running on:", platform.system(), platform.release(), "(" + os.name + ")")
 		print('-------------------')
 
+def humanseconds(S):
+	if S == -2:
+		return '?' if COMPACT_OUTPUT else 'Unknown'
+	elif S == -1:
+		return 'N/A'
+	elif S < 0:
+		return 'N/A'
+	
+	M = 60
+	H = M * 60
+	D = H * 24
+	W = D * 7
+	
+	w,s = divmod(S,W)
+	d,s = divmod(s,D)
+	h,s = divmod(s,H)
+	m,s = divmod(s,M)
+	
+	if COMPACT_OUTPUT:
+		d += w * 7
+		out = '{}{:02d}:{:02d}:{:02d}'.format('' if d == 0 else '{}-'.format(d), h, m, s)
+	else:
+		out = '{}{}{:02d}:{:02d}:{:02d}'.format('' if w == 0 else '{} week{}, '.format(w,'' if w == 1 else 's'), '' if d == 0 else '{} day{}, '.format(d,'' if d == 1 else 's'), h, m, s)
+		
+	return out
+
 def humanbytes(B,d = 2):
 	'Return the given bytes as a human friendly KB, MB, GB, or TB string'
 	B = float(B)
@@ -478,9 +532,22 @@ def tobytes(B):
 	for prefix in (KB,MB,GB,TB):
 		if numstr[1] in prefix[0]:
 			return float(float(numstr[0]) * prefix[1])
-
+	
+async def IsCompactOutput(context):
+	if OUTPUT_MODE == OutputMode.AUTO:
+		if context.message.author.is_on_mobile():
+			return OutputMode.MOBILE
+		else:
+			return OutputMode.DESKTOP
+	else:
+		return OUTPUT_MODE
+		
 # check that message author is allowed and message was sent in allowed channel
 async def CommandPrecheck(context):
+	# first set output mode
+	global COMPACT_OUTPUT
+	COMPACT_OUTPUT = await IsCompactOutput(context) == OutputMode.MOBILE
+	
 	if len(CHANNEL_IDS) > 0 and context.message.channel.id not in CHANNEL_IDS:
 		await context.message.channel.send("I don't respond to commands in this channel...")
 		return False
@@ -488,26 +555,42 @@ async def CommandPrecheck(context):
 		await context.message.channel.send("You're not allowed to use this...")
 		return False
 	return True
+	
 				
 @client.command(name='add', aliases=['a'], pass_context=True)
-async def add(context, *, content):
+async def add(context, *, content = ""):
 	if await CommandPrecheck(context):
-		if content == "":
-			await context.message.channel.send("Invalid string")
-		else:
-			try:
-				await context.message.delete()
-			except:
-				pass
-			torStr = None
-			for t in content.strip().split(" "):
-				await context.message.channel.send('Adding torrent {}\n Please wait...'.format(t))
+		torFileList = []
+		for f in context.message.attachments:
+			if len(f.filename) > 8 and f.filename[-8:].lower() == ".torrent":
+				encodedBytes = base64.b64encode(await f.read())
+				encodedStr = str(encodedBytes, "utf-8")
+				torFileList.append({"name":f.filename,"content":encodedStr})
+			continue
+		if content == "" and len(torFileList) == 0:
+			await context.message.channel.send("🚫 Invalid string")
+		
+		try:
+			await context.message.delete()
+		except:
+			pass
+		
+		torStr = []
+		for t in torFileList:
+			# await context.message.channel.send('Adding torrent from file: {}\n Please wait...'.format(t["name"]))
+			tor = add_torrent(t["content"])
+			torStr.append("From file: {}".format(tor.name))
+			
+		for t in content.strip().split(" "):
+			if len(t) > 5:
+				# await context.message.channel.send('Adding torrent from link: {}\n Please wait...'.format(t))
 				tor = add_torrent(t)
-				if torStr:
-					torStr += "\n{}" % tor.name
-				else:
-					torStr = tor.name
-			await context.message.channel.send('✅ Added torrent{}:\n{}'.format("s" if len(content.strip().split(" ")) > 1 else "", torStr))
+				torStr.append("From link: {}".format(tor.name))
+				
+		if len(torStr) > 0:
+			await context.message.channel.send('✅ Added torrent{}:\n{}'.format("s" if len(torStr) > 1 else "", '\n'.join(torStr)))
+		else:
+			await context.message.channel.send('🚫 No torrents added!')
 	
 # def torInfo(t):
 # 	states = ('downloading', 'seeding', 'stopped', 'finished','all')
@@ -572,7 +655,7 @@ def numTorInState(torrents, state):
 	else:
 		return 0
 
-def torSummary(torrents, repeat=False):
+def torSummary(torrents, repeat_msg_key=None):
 	numInState = [numTorInState(torrents,s) for s in torStates]
 	numTot = len(torrents)
 	
@@ -612,146 +695,123 @@ def torSummary(torrents, repeat=False):
 		embed.add_field(name="Activity", value='\n'.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[6:9], numInState[6:9])]), inline=not COMPACT_OUTPUT)
 		embed.add_field(name="Tracker", value='\n'.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[9:11], numInState[9:11])]), inline=not COMPACT_OUTPUT)
 		
-	embed.set_footer(text=topRatios+"\n📜 Symbol legend{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_FREQ,'s' if REPEAT_FREQ != 1 else '') if repeat else ', 🔄 to auto-update'))
+	freq = REPEAT_MSGS[repeat_msg_key]['freq'] if repeat_msg_key else None
+	embed.set_footer(text=topRatios+"\n📜 Symbol legend{}".format('\nUpdating every {} second{}—❎ to stop'.format(freq,'s' if freq != 1 else '') if repeat_msg_key else ', 🔄 to auto-update'))
 	# await context.message.channel.send(embed=embed)
 	return embed,numInState
 				
 @client.command(name='summary',aliases=['s'], pass_context=True)
-async def summary(context, *, content="", repeat=False):
-	global REPEAT_COMMAND, REPEAT_MSG_LIST
+async def summary(context, *, content="", repeat_msg_key=None):
+	global REPEAT_MSGS
 	if await CommandPrecheck(context):
-		if not repeat:
+		if not repeat_msg_key:
 			try:
 				await context.message.delete()
 			except:
 				pass
-		stateEmoji = ('📜','❎' if repeat else '🔄','↕️') + torStateEmoji
+		
+		stateEmojiFilterStartNum = 3 # the first emoji in stateEmoji that corresponds to a list filter
 		ignoreEmoji = ('✅')
 		
-		summaryData=torSummary(TSCLIENT.get_torrents(), repeat=repeat)
+		summaryData=torSummary(TSCLIENT.get_torrents(), repeat_msg_key=repeat_msg_key)
 		
-		if repeat:
-			msg = REPEAT_MSG_LIST[0]
-			if context.message.channel.last_message_id != msg.id:
+		if repeat_msg_key:
+			msg = REPEAT_MSGS[repeat_msg_key]['msgs'][0]
+			if REPEAT_MSGS[repeat_msg_key]['reprint'] or (REPEAT_MSGS[repeat_msg_key]['pin_to_bottom'] and context.message.channel.last_message_id != msg.id):
 				await msg.delete()
 				msg = await context.message.channel.send(embed=summaryData[0])
-				REPEAT_MSG_LIST = [msg]
+				REPEAT_MSGS[repeat_msg_key]['msgs'] = [msg]
+				REPEAT_MSGS[repeat_msg_key]['reprint'] = False
 			else:
 				await msg.edit(embed=summaryData[0])
+			
+			if context.message.channel.last_message_id != msg.id:
+				stateEmoji = ('📜','🖨','❎','↕️') + torStateEmoji
+				stateEmojiFilterStartNum += 1
+			else:
+				stateEmoji = ('📜','❎','↕️') + torStateEmoji
 		else:
+			stateEmoji = ('📜','🔄','↕️') + torStateEmoji
 			msg = await context.message.channel.send(embed=summaryData[0])
 		
 		# to get actual list of reactions, need to re-fetch the message from the server
 		cache_msg = await context.message.channel.fetch_message(msg.id)
 		msgRxns = [str(r.emoji) for r in cache_msg.reactions]
 		
-		for i in stateEmoji[:3]:
+		for i in stateEmoji[:stateEmojiFilterStartNum]:
 			if i not in msgRxns:
 				await msg.add_reaction(i)
 		for i in range(len(summaryData[1])):
-			if summaryData[1][i] > 0 and stateEmoji[i+3] not in ignoreEmoji and stateEmoji[i+3] not in msgRxns:
-				await msg.add_reaction(stateEmoji[i+3])
-			elif summaryData[1][i] == 0 and stateEmoji[i+3] in msgRxns:
-				await msg.clear_reaction(stateEmoji[i+3])
+			if summaryData[1][i] > 0 and stateEmoji[i+stateEmojiFilterStartNum] not in ignoreEmoji and stateEmoji[i+stateEmojiFilterStartNum] not in msgRxns:
+				await msg.add_reaction(stateEmoji[i+stateEmojiFilterStartNum])
+			elif summaryData[1][i] == 0 and stateEmoji[i+stateEmojiFilterStartNum] in msgRxns:
+				await msg.clear_reaction(stateEmoji[i+stateEmojiFilterStartNum])
 			cache_msg = await context.message.channel.fetch_message(msg.id)
 			for r in cache_msg.reactions:
 				if r.count > 1:
 					async for user in r.users():
-						if user.id == context.message.author.id:
+						if user.id in WHITELIST:
 							if str(r.emoji) == stateEmoji[0]:
 								await legend(context)
 								return
 							elif str(r.emoji) == stateEmoji[1]:
-								if repeat:
-									REPEAT_COMMAND = False
-									REPEAT_MSG_LIST = []
-									await context.message.channel.send("❎ Auto-update cancelled...")
+								if repeat_msg_key:
+									REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
 									return
 								else:
 									await msg.clear_reaction('🔄')
 									await repeat_command(summary, context=context, content=content, msg_list=[msg])
 									return
-							elif str(r.emoji) in stateEmoji[2:]:
-								if repeat:
-									REPEAT_COMMAND = False
-									REPEAT_MSG_LIST = []
-									await context.message.channel.send("❎ Auto-update cancelled...")
+							elif str(r.emoji) in stateEmoji[stateEmojiFilterStartNum-1:] and user.id == context.message.author.id:
+								if repeat_msg_key:
+									REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
 								await list_transfers(context, content=torStateFilters[str(r.emoji)])
 								return
-				
-		# first check to see if a user clicked a reaction before they finished printing
-		# cache_msg = await context.message.channel.fetch_message(msg.id)
-# 		for r in cache_msg.reactions:
-# 			if r.count > 1:
-# 				async for user in r.users():
-# 					if user.id == context.message.author.id:
-# 						if str(r.emoji) == stateEmoji[0]:
-# 							await legend(context)
-# 							return
-# 						elif str(r.emoji) == stateEmoji[1]:
-# 							if repeat:
-# 								REPEAT_COMMAND = False
-# 								REPEAT_MSG_LIST = []
-# 								await context.message.channel.send("❎ Auto-update cancelled...")
-# 								return
-# 							else:
-# 								await msg.clear_reaction('🔄')
-# 								await repeat_command(summary, context=context, content=content, msg_list=[msg])
-# 								return
-# 						elif str(r.emoji) in stateEmoji[2:]:
-# 							if repeat:
-# 								REPEAT_COMMAND = False
-# 								REPEAT_MSG_LIST = []
-# 								await context.message.channel.send("❎ Auto-update cancelled...")
-# 							await list_transfers(context, content=torStateFilters[str(r.emoji)])
-# 							return
 		
 		def check(reaction, user):
 			return user == context.message.author and reaction.message.id == msg.id and str(reaction.emoji) in stateEmoji
 		
 		try:
-			reaction, user = await client.wait_for('reaction_add', timeout=60.0 if not repeat else REPEAT_FREQ, check=check)
+			reaction, user = await client.wait_for('reaction_add', timeout=60.0 if not repeat_msg_key else REPEAT_MSGS[repeat_msg_key]['freq'], check=check)
 		except asyncio.TimeoutError:
 			pass
 		else:
-			if str(reaction.emoji) in stateEmoji[2:] and str(reaction.emoji) not in ignoreEmoji:
-				if repeat:
-					REPEAT_COMMAND = False
-					REPEAT_MSG_LIST = []
-					await context.message.channel.send("❎ Auto-update cancelled...")
+			if str(reaction.emoji) in stateEmoji[stateEmojiFilterStartNum-1:] and str(reaction.emoji) not in ignoreEmoji:
+				if repeat_msg_key:
+					REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
 				await list_transfers(context, content=torStateFilters[str(reaction.emoji)])
 				return
 			elif str(reaction.emoji) == stateEmoji[0]:
 				await legend(context)
 				return
-			elif str(reaction.emoji) == stateEmoji[1]:
-				if repeat:
-					REPEAT_COMMAND = False
-					REPEAT_MSG_LIST = []
-					await context.message.channel.send("❎ Auto-update cancelled...")
-					return
-				else:
-					await msg.clear_reaction('🔄')
-					await repeat_command(summary, context=context, content=content, msg_list=[msg])
-					return
-		if repeat: # a final check to see if the user has cancelled the repeat by checking the count of the cancel reaction
+			elif str(reaction.emoji) == '❎':
+				REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
+				return
+			elif str(reaction.emoji) == '🔄':
+				await msg.clear_reaction('🔄')
+				await repeat_command(summary, context=context, content=content, msg_list=[msg])
+				return
+			elif str(reaction.emoji) == '🖨':
+				REPEAT_MSGS[repeat_msg_key]['reprint'] = True
+				await msg.clear_reaction('🖨')
+		if repeat_msg_key: # a final check to see if the user has cancelled the repeat by checking the count of the cancel reaction
 			cache_msg = await context.message.channel.fetch_message(msg.id)
 			for r in cache_msg.reactions:
-				if str(r.emoji) == '❎' and r.count > 1:
-					async for user in r.users():
-						if user.id == context.message.author.id:
-							REPEAT_COMMAND = False
-							REPEAT_MSG_LIST = []
-							await context.message.channel.send("❎ Auto-update cancelled...")
-							return
-				elif str(r.emoji) in stateEmoji[2:] and r.count > 1:
-					async for user in r.users():
-						if user.id == context.message.author.id:
-							REPEAT_COMMAND = False
-							REPEAT_MSG_LIST = []
-							await context.message.channel.send("❎ Auto-update cancelled...")
-							await list_transfers(context, content=torStateFilters[str(r.emoji)])
-							return
+				if r.count > 1:
+					if str(r.emoji) == '❎':
+						async for user in r.users():
+							if user.id == context.message.author.id:
+								REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
+								return
+					elif str(r.emoji) == '🖨':
+						REPEAT_MSGS[repeat_msg_key]['reprint'] = True
+						await msg.clear_reaction('🖨')
+					elif str(r.emoji) in stateEmoji[stateEmojiFilterStartNum-1:]:
+						async for user in r.users():
+							if user.id == context.message.author.id:
+								REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
+								await list_transfers(context, content=torStateFilters[str(r.emoji)])
+								return
 
 def strListToList(strList):
 	if not re.match('^[0-9\,\-]+$', strList):
@@ -770,17 +830,24 @@ def strListToList(strList):
 	return outList
 
 
-def torList(torrents, author_name="Torrent Transfers",title=None,description=None,repeat=False):
+def torList(torrents, author_name="Torrent Transfers",title=None,description=None):
 	states = ('downloading', 'seeding', 'stopped', 'finished','checking','check pending','download pending','upload pending')
 	stateEmoji = {i:j for i,j in zip(states,['🔻','🌱','⏸','🏁','🩺','🩺','🚧','🚧'])}
 	errorStrs = ['✅','⚠️','🌐','🖥']
 
 	def torListLine(t):
+		try:
+			eta = int(t.eta.total_seconds())
+		except:
+			try:
+				eta = int(t.eta)
+			except:
+				eta = 0
 		if COMPACT_OUTPUT:
 			down = humanbytes(t.progress * 0.01 * t.totalSize, d=0)
-			out = "{}{} ".format(stateEmoji[t.status],errorStrs[t.error])
+			out = "{}{} ".format(stateEmoji[t.status],errorStrs[t.error] if t.error != 0 else '')
 			if t.status == 'downloading':
-				out += "{}%{} {}/s:*{}/s*:{:.1f}".format(int(t.progress), down, humanbytes(t.rateDownload, d=0), humanbytes(t.rateUpload, d=0), t.uploadRatio)
+				out += "{}%{} {}{}/s:*{}/s*:{:.1f}".format(int(t.progress), down, '' if eta <= 0 else '{}@'.format(humanseconds(eta)), humanbytes(t.rateDownload, d=0), humanbytes(t.rateUpload, d=0), t.uploadRatio)
 			elif t.status == 'seeding':
 				out += "{} *{}/s*:{:.1f}".format(down, humanbytes(t.rateUpload, d=0), t.uploadRatio)
 			elif t.status == 'stopped':
@@ -791,7 +858,7 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 			down = humanbytes(t.progress * 0.01 * t.totalSize)
 			out = "{} {} {} {} ".format(stateEmoji[t.status],errorStrs[t.error],'🚀' if t.rateDownload + t.rateUpload > 0 else '🐢' if t.isStalled else '🐇', '🔐' if t.isPrivate else '🔓')
 			if t.status == 'downloading':
-				out += "⏬ {}/{} ({:.1f}%) ⬇️ {}/s ⬆️ *{}/s* ⚖️ *{:.2f}*".format(down,humanbytes(t.totalSize),t.progress, humanbytes(t.rateDownload),humanbytes(t.rateUpload),t.uploadRatio)
+				out += "⏬ {}/{} ({:.1f}%) {}⬇️ {}/s ⬆️ *{}/s* ⚖️ *{:.2f}*".format(down,humanbytes(t.totalSize),t.progress, '' if eta <= 0 else '\n⏳ {} @ '.format(humanseconds(eta)), humanbytes(t.rateDownload),humanbytes(t.rateUpload),t.uploadRatio)
 			elif t.status == 'seeding':
 				out += "⏬ {} ⬆️ *{}/s* ⚖️ *{:.2f}*".format(humanbytes(t.totalSize),humanbytes(t.rateUpload),t.uploadRatio)
 			elif t.status == 'stopped':
@@ -876,56 +943,82 @@ def torGetListOpsFromStr(listOpStr):
 	return filter_by, sort_by, filter_regex
 
 async def repeat_command(command, context, content="", msg_list=[]):
-	global REPEAT_COMMAND, REPEAT_MSG_LIST
-	if REPEAT_COMMAND:
-		await context.message.channel.send("❎ Can't start auto-update when another command is already auto-updating...")
-		return
-	REPEAT_COMMAND = True
-	REPEAT_MSG_LIST = msg_list
-	start_time = datetime.datetime.now()
-	while REPEAT_COMMAND:
-		delta = datetime.datetime.now() - start_time
-		if delta.seconds >= REPEAT_TIMEOUT:
-			await context.message.channel.send("❎ Auto-update timed out...")
-			REPEAT_COMMAND = False
-			REPEAT_MSG_LIST = []
-			start_time = 0
-			return
-		# for msg in REPEAT_MSG_LIST:
-		# 	await msg.delete()
-		await command(context=context, content=content, repeat=True)
+	global REPEAT_MSGS
+	msg_key = secrets.token_hex()
+	REPEAT_MSGS[msg_key] = {
+		'msgs':msg_list,
+		'command':command,
+		'context':context,
+		'content':content,
+		'pin_to_bottom':False,
+		'reprint': False,
+		'freq':REPEAT_FREQ,
+		'timeout':REPEAT_TIMEOUT,
+		'timeout_verbose':REPEAT_TIMEOUT_VERBOSE,
+		'cancel_verbose':REPEAT_CANCEL_VERBOSE,
+		'start_time':datetime.datetime.now(),
+		'do_repeat':True
+	}
+	
+	while msg_key in REPEAT_MSGS:
+		msg = REPEAT_MSGS[msg_key]
+		if msg['do_repeat']:
+			delta = datetime.datetime.now() - msg['start_time']
+			if delta.seconds >= msg['timeout']:
+				if msg['timeout_verbose']:
+					await context.message.channel.send("❎ Auto-update timed out...")
+				break
+			else:
+				try:
+					await msg['command'](context=msg['context'], content=msg['content'], repeat_msg_key=msg_key)
+				except:
+					await asyncio.sleep(REPEAT_FREQ)
+		else:
+			if msg['cancel_verbose']:
+				await context.message.channel.send("❎ Auto-update canceled...")
+			break
+			
+	del REPEAT_MSGS[msg_key]
 	return
 
 @client.command(name='list', aliases=['l'], pass_context=True)
-async def list_transfers(context, *, content="", repeat=False):
-	global REPEAT_COMMAND, REPEAT_MSG_LIST
+async def list_transfers(context, *, content="", repeat_msg_key=None):
+	global REPEAT_MSGS
 	if await CommandPrecheck(context):
-		filter_by, sort_by, filter_regex = torGetListOpsFromStr(content)
-		if filter_by == -1:
-			await context.message.channel.send("Invalid filter specified. Choose one of {}".format(str(filter_names_full)))
-			return
-		if sort_by == -1:
-			await context.message.channel.send("Invalid sort specified. Choose one of {}".format(str(sort_names)))
-			return
+		id_list = strListToList(content)
+		filter_by = None
+		sort_by = None
+		filter_regex = None
+		if not id_list:
+			filter_by, sort_by, filter_regex = torGetListOpsFromStr(content)
+			if filter_by == -1:
+				await context.message.channel.send("Invalid filter specified. Choose one of {}".format(str(filter_names_full)))
+				return
+			if sort_by == -1:
+				await context.message.channel.send("Invalid sort specified. Choose one of {}".format(str(sort_names)))
+				return
 		
-		if not repeat:
+		
+		
+		if not repeat_msg_key:
 			try:
 				await context.message.delete()
 			except:
 				pass
 		
-		torrents = TSCLIENT.get_torrents_by(sort_by=sort_by, filter_by=filter_by, filter_regex=filter_regex)
+		torrents = TSCLIENT.get_torrents_by(sort_by=sort_by, filter_by=filter_by, filter_regex=filter_regex, id_list=id_list)
 		
 		embeds = torList(torrents, title="{} transfer{} matching '`{}`'".format(len(torrents),'' if len(torrents)==1 else 's',content))
 		
-		embeds[-1].set_footer(text="📜 Symbol legend{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_FREQ,'s' if REPEAT_FREQ != 1 else '') if repeat else ', 🔄 to auto-update'))
+		embeds[-1].set_footer(text="📜 Symbol legend{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_MSGS[repeat_msg_key]['freq'],'s' if REPEAT_MSGS[repeat_msg_key]['freq'] != 1 else '') if repeat_msg_key else ', 🔄 to auto-update'))
 		
-		if repeat:
-			msgs = REPEAT_MSG_LIST
-			if context.message.channel.last_message_id != msgs[-1].id:
+		if repeat_msg_key:
+			msgs = REPEAT_MSGS[repeat_msg_key]['msgs']
+			if REPEAT_MSGS[repeat_msg_key]['reprint'] or (REPEAT_MSGS[repeat_msg_key]['pin_to_bottom'] and context.message.channel.last_message_id != msgs[-1].id):
 				for m in msgs:
 					await m.delete()
 				msgs = []
+				REPEAT_MSGS[repeat_msg_key]['reprint'] = False
 			for i,e in enumerate(embeds):
 				if i < len(msgs):
 					await msgs[i].edit(embed=e)
@@ -938,8 +1031,11 @@ async def list_transfers(context, *, content="", repeat=False):
 				for i in range(len(msgs) - len(embeds)):
 					await msgs[-1].delete()
 					del msgs[-1]
-			REPEAT_MSG_LIST = msgs
-			rxnEmoji = ['📜','❎']
+			REPEAT_MSGS[repeat_msg_key]['msgs'] = msgs
+			if context.message.channel.last_message_id != msgs[-1].id:
+				rxnEmoji = ['📜','🖨','❎']
+			else:
+				rxnEmoji = ['📜','❎']
 		else:
 			msgs = [await context.message.channel.send(embed=e) for e in embeds]
 			rxnEmoji = ['📜','🔄']
@@ -950,40 +1046,46 @@ async def list_transfers(context, *, content="", repeat=False):
 		cache_msg = await context.message.channel.fetch_message(msg.id)
 		msgRxns = [str(r.emoji) for r in cache_msg.reactions]
 		
+		for e in msgRxns:
+			if e not in rxnEmoji:
+				await msg.clear_reaction(e)
+		
 		for e in rxnEmoji:
 			if e not in msgRxns:
 				await msg.add_reaction(e)
 		
 		def check(reaction, user):
-			return user == context.message.author and reaction.message.id == msg.id and str(reaction.emoji) in rxnEmoji
+			return user.id in WHITELIST and reaction.message.id == msg.id and str(reaction.emoji) in rxnEmoji
 		
 		try:
-			reaction, user = await client.wait_for('reaction_add', timeout=60.0 if not repeat else REPEAT_FREQ, check=check)
+			reaction, user = await client.wait_for('reaction_add', timeout=60.0 if not repeat_msg_key else REPEAT_MSGS[repeat_msg_key]['freq'], check=check)
 		except asyncio.TimeoutError:
 			pass
 		else:
 			if str(reaction.emoji) == '📜':
 				await legend(context)
-			elif str(reaction.emoji) == rxnEmoji[-1]:
-				if repeat:
-					REPEAT_COMMAND = False
-					REPEAT_MSG_LIST = []
-					await context.message.channel.send("❎ Auto-update cancelled...")
-					return
-				else:
-					await msg.clear_reaction('🔄')
-					await repeat_command(list_transfers, context=context, content=content, msg_list=msgs)
-					return
-		if repeat: # a final check to see if the user has cancelled the repeat by checking the count of the cancel reaction
+			elif str(reaction.emoji) == '🖨':
+				REPEAT_MSGS[repeat_msg_key]['reprint'] = True
+				await msg.clear_reaction('🖨')
+			elif str(reaction.emoji) == '❎':
+				REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
+				return
+			elif str(reaction.emoji) == '🔄':
+				await msg.clear_reaction('🔄')
+				await repeat_command(list_transfers, context=context, content=content, msg_list=msgs)
+				return
+		if repeat_msg_key: # a final check to see if the user has cancelled the repeat by checking the count of the cancel reaction
 			cache_msg = await context.message.channel.fetch_message(msg.id)
 			for r in cache_msg.reactions:
-				if str(r.emoji) == '❎' and r.count > 1:
-					async for user in r.users():
-						if user.id == context.message.author.id:
-							REPEAT_COMMAND = False
-							REPEAT_MSG_LIST = []
-							await context.message.channel.send("❎ Auto-update cancelled...")
-							return
+				if r.count > 1:
+					if str(r.emoji) == '🖨':
+						REPEAT_MSGS[repeat_msg_key]['reprint'] = True
+						await msg.clear_reaction('🖨')
+					elif str(r.emoji) == '❎':
+						async for user in r.users():
+							if user.id in WHITELIST:
+								REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
+								return
 
 @client.command(name='modify', aliases=['m'], pass_context=True)
 async def modify(context, *, content=""):
@@ -1154,24 +1256,57 @@ async def modify(context, *, content=""):
 
 @client.command(name='compact', aliases=['c'], pass_context=True)
 async def toggle_compact_out(context):
-	global COMPACT_OUTPUT
-	COMPACT_OUTPUT = not COMPACT_OUTPUT
-	outStr = ''
-	await context.message.channel.send('📱 Switched to mobile output' if COMPACT_OUTPUT else '🖥 Switched to desktop output')
+	global OUTPUT_MODE
+	if OUTPUT_MODE == OutputMode.AUTO:
+		if context.message.author.is_on_mobile():
+			OUTPUT_MODE = OutputMode.DESKTOP
+			await context.message.channel.send('🖥 Switched to desktop output')
+		else:
+			OUTPUT_MODE = OutputMode.MOBILE
+			await context.message.channel.send('📱 Switched to mobile output')
+	else:
+		OUTPUT_MODE = OutputMode.AUTO
+		await context.message.channel.send("🧠 Switched to smart selection of output (for you, {})".format('📱 mobile' if context.message.author.is_on_mobile() else '🖥 desktop'))
 	return
+
+async def LegendGetEmbed(embed_data=None):
+	isCompact = False #COMPACT_OUTPUT
+	joinChar = ',' if isCompact else '\n'
+	if embed_data:
+		embed = discord.Embed.from_dict(embed_data)
+		embed.add_field(name='Symbol legend', value='', inline=False)	
+	else:
+		embed = discord.Embed(title='Symbol legend', color=0xb51a00)
+
+	embed.add_field(name="Status", value=joinChar.join(["🔻—downloading","🌱—seeding","⏸—paused","🩺—verifying","🚧—queued","🏁—finished","↕️—any"]), inline=not isCompact)
+	embed.add_field(name="Metrics", value=joinChar.join(["⬇️—download  rate","⬆️—upload  rate","⏬—total  downloaded","⏫—total  uploaded","⚖️—seed  ratio","⏳—ETA"]), inline=not isCompact)
+	embed.add_field(name="Modifications", value=joinChar.join(["⏸—pause","▶️—resume","❌—remove","🗑—remove  and  delete","🩺—verify"]), inline=not isCompact)
+	embed.add_field(name="Error", value=joinChar.join(["✅—none","⚠️—tracker  warning","🌐—tracker  error","🖥—local  error"]), inline=not isCompact)
+	embed.add_field(name="Activity", value=joinChar.join(["🐢—stalled","🐇—active","🚀—running (rate>0)"]), inline=not isCompact)
+	embed.add_field(name="Tracker", value=joinChar.join(["🔐—private","🔓—public"]), inline=not isCompact)
+	embed.add_field(name="Messages", value=joinChar.join(["🔄—auto-update message","❎—cancel auto-update","🖨—reprint at bottom"]), inline=not isCompact)
+	return embed
 
 @client.command(name='legend', pass_context=True)
 async def legend(context):
-	embed = discord.Embed(title='Symbol legend', color=0xb51a00)
-	embed.add_field(name="Status", value="🔻—downloading\n🌱—seeding\n⏸—paused\n🩺—verifying\n🚧—queued\n🏁—finished\n↕️—any", inline=True)
-	embed.add_field(name="Error", value="✅—none\n⚠️—tracker  warning\n🌐—tracker  error\n🖥—local  error", inline=True)
-	embed.add_field(name="Metrics", value="⬇️—download  rate\n⬆️—upload  rate\n⏬—total  downloaded\n⏫—total  uploaded\n⚖️—seed  ratio", inline=True)
-	embed.add_field(name="Activity", value="🐢—stalled\n🐇—active\n🚀—running (rate>0)", inline=True)
-	embed.add_field(name="Tracker", value="🔐—private\n🔓—public", inline=True)
-	embed.add_field(name="Modifications", value="⏸—pause\n▶️—resume\n❌—remove\n🗑—remove  and  delete\n🩺—verify", inline=True)
-	await context.message.channel.send(embed=embed)
-	if REPEAT_COMMAND:
-		await asyncio.sleep(5)
+	if await CommandPrecheck(context):
+		await context.message.channel.send(embed=await LegendGetEmbed())
+	return
+
+# @client.command(name='test', pass_context=True)
+# async def test(context):
+# 	if context.message.author.is_on_mobile():
+# 		await context.channel.send('on mobile')
+# 	else:
+# 		await context.channel.send('on desktop')
+# 	return
+
+@client.command(name='purge', aliases=['p'], pass_context=True)
+async def purge(context):
+	def is_pinned(m):
+		return m.pinned
+	deleted = await context.channel.purge(limit=100, check=not is_pinned)
+	await context.channel.send('Deleted {} message(s)'.format(len(deleted)))
 	return
 
 client.remove_command('help')
@@ -1191,9 +1326,9 @@ async def help(context, *, content=""):
 				await context.message.channel.send(embed=embed)
 			elif content in ["a","add"]:
 				embed = discord.Embed(title='Add transfer', description="If multiple torrents are added, separate them by spaces", color=0xb51a00)
-				embed.set_author(name="Add one or more specified torrents by magnet link or url to torrent file", icon_url=LOGO_URL)
+				embed.set_author(name="Add one or more specified torrents by magnet link, url to torrent file, or by attaching a torrent file", icon_url=LOGO_URL)
 				embed.add_field(name="Usage", value='`{0}add TORRENT_FILE_URL_OR_MAGNET_LINK ...`\n`{0}a TORRENT_FILE_URL_OR_MAGNET_LINK ...`'.format(BOT_PREFIX), inline=False)
-				embed.add_field(name="Examples", value="*Add download of ubuntu OS:* `{0}add https://releases.ubuntu.com/20.04/ubuntu-20.04.1-desktop-amd64.iso.torrent`".format(BOT_PREFIX), inline=False)
+				embed.add_field(name="Examples", value="*Add download of Linux Ubuntu using link to torrent file:* `{0}add https://releases.ubuntu.com/20.04/ubuntu-20.04.1-desktop-amd64.iso.torrent`\n*Add download of ubuntu using the actual `.torrent` file:* Select the `.torrent` file as an attachmend in Discord, then enter `t/a` as the caption".format(BOT_PREFIX), inline=False)
 				await context.message.channel.send(embed=embed)
 			elif content in ["m","modify"]:
 				embed = discord.Embed(title='Modify existing transfer(s)', color=0xb51a00)
@@ -1209,16 +1344,69 @@ async def help(context, *, content=""):
 			embed.set_author(name='Transmission Bot: Manage torrent file transfers', icon_url=LOGO_URL)
 			embed.add_field(name="Print summary of transfers", value="*print summary from all transfers, with followup options to list transfers*\n*ex.* `{0}summary` or `{0}s`".format(BOT_PREFIX), inline=False)
 			embed.add_field(name="List torrent transfers", value="*list current transfers with sorting, filtering, and search options*\n*ex.* `{0}list [OPTIONS]` or `{0}l [OPTIONS]`".format(BOT_PREFIX), inline=False)
-			embed.add_field(name="Add new torrent transfers", value="*add one or more specified torrents by magnet link or url to torrent file*\n*ex.* `{0}add TORRENT ...` or `{0}a TORRENT ...`".format(BOT_PREFIX), inline=False)
+			embed.add_field(name="Add new torrent transfers", value="*add one or more specified torrents by magnet link, url to torrent file, or by attaching a torrent file*\n*ex.* `{0}add TORRENT ...` or `{0}a TORRENT ...`".format(BOT_PREFIX), inline=False)
 			embed.add_field(name="Modify existing transfers", value="*pause, resume, remove, or remove and delete specified transfers*\n*ex.* `{0}modify [TORRENT]` or `{0}m [TORRENT]`".format(BOT_PREFIX), inline=False)
-			embed.add_field(name='Toggle output style', value='*toggle between desktop (default) and mobile (narrow) output style*\n*ex.* `{0}compact` or {0}c'.format(BOT_PREFIX), inline=False)
+			embed.add_field(name='Toggle output style', value='*toggle between desktop (default), mobile (narrow), or smart selection of output style*\n*ex.* `{0}compact` or {0}c'.format(BOT_PREFIX), inline=False)
 			embed.add_field(name='Show legend', value='*prints legend showing the meaning of symbols used in the output of other commands*\n*ex.* `{0}legend`'.format(BOT_PREFIX), inline=False)
 			embed.add_field(name='Help - Gives this menu', value='*with optional details of specified command*\n*ex.* `{0}help` or `{0}help COMMAND`'.format(BOT_PREFIX), inline=False)
-		
+			
+			# if not COMPACT_OUTPUT:
+			# 	legendEmbed=await LegendGetEmbed()
+			# 	embed.add_field(name=legendEmbed.title, value='', inline=False)
+			# 	for f in legendEmbed.fields:
+			# 		embed.add_field(name=f.name, value=f.value, inline=f.inline)
+			
 			await context.message.channel.send(embed=embed)
 
 @client.event
 async def on_command_error(context, error):
+	# if command has local error handler, return
+	if hasattr(context.command, 'on_error'):
+		return
+	
+	# get the original exception
+	error = getattr(error, 'original', error)
+	if isinstance(error, commands.CommandNotFound):
+		return
+	if isinstance(error, commands.BotMissingPermissions):
+		missing = [perm.replace('_', ' ').replace('guild', 'server').title() for perm in error.missing_perms]
+		if len(missing) > 2:
+			fmt = '{}, and {}'.format("**, **".join(missing[:-1]), missing[-1])
+		else:
+			fmt = ' and '.join(missing)
+			_message = 'I need the **{}** permission(s) to run this command.'.format(fmt)
+			await context.send(_message)
+		return
+	if isinstance(error, commands.DisabledCommand):
+		await context.send('This command has been disabled.')
+		return
+	if isinstance(error, commands.CommandOnCooldown):
+		await context.send("This command is on cooldown, please retry in {}s.".format(math.ceil(error.retry_after)))
+		return
+	if isinstance(error, commands.MissingPermissions):
+		missing = [perm.replace('_', ' ').replace('guild', 'server').title() for perm in error.missing_perms]
+		if len(missing) > 2:
+			fmt = '{}, and {}'.format("**, **".join(missing[:-1]), missing[-1])
+		else:
+			await context.send(_message)
+		return
+	if isinstance(error, commands.UserInputError):
+		await context.send("Invalid input.")
+		await help(context)
+		return
+	if isinstance(error, commands.NoPrivateMessage):
+		try:
+			await context.author.send('This command cannot be used in direct messages.')
+		except discord.Forbidden:
+			pass
+		return
+	if isinstance(error, commands.CheckFailure):
+		await context.send("You do not have permission to use this command.")
+		return
+	# ignore all other exception types, but print them to stderr
+	print('Ignoring exception in command {}:'.format(context.command), file=sys.stderr)
+	# traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+	
 	if isinstance(error, commands.CommandOnCooldown):
 		try:
 			await context.message.delete()
