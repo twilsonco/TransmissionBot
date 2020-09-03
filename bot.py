@@ -752,7 +752,10 @@ async def summary(context, *, content="", repeat_msg_key=None):
 					async for user in r.users():
 						if user.id in WHITELIST:
 							if str(r.emoji) == '📜':
-								await msg.clear_reaction('📜')
+								if repeat_msg_key:
+									await msg.clear_reaction('📜')
+								else:
+									await msg.clear_reactions()
 								await legend(context)
 								return
 							elif str(r.emoji) == '❎':
@@ -1069,10 +1072,16 @@ async def list_transfers(context, *, content="", repeat_msg_key=None):
 		try:
 			reaction, user = await client.wait_for('reaction_add', timeout=60.0 if not repeat_msg_key else REPEAT_MSGS[repeat_msg_key]['freq'], check=check)
 		except asyncio.TimeoutError:
+			if not repeat_msg_key:
+				await msg.clear_reactions()
+				return
 			pass
 		else:
 			if str(reaction.emoji) == '📜':
-				await msg.clear_reaction('📜')
+				if repeat_msg_key:
+					await msg.clear_reaction('📜')
+				else:
+					await msg.clear_reactions()
 				await legend(context)
 				return
 			elif str(reaction.emoji) == '🖨':
