@@ -1182,6 +1182,7 @@ async def modify(context, *, content=""):
 								cmdName = cmdNames[str(reaction.emoji)]
 			
 								doContinue = True
+								msg2 = None
 								if "remove" in cmds[str(reaction.emoji)]:
 									embed=discord.Embed(title="Are you sure you wish to remove{} {} transfer{}?".format(' and DELETE' if 'delete' in cmds[str(reaction.emoji)] else '', len(torrents), '' if len(torrents)==1 else 's'),description="**This action is irreversible!**",color=0xb51a00)
 									embed.set_footer(text="react ✅ to continue or ❌ to cancel")
@@ -1218,12 +1219,14 @@ async def modify(context, *, content=""):
 									opEmoji = {i:j for i,j in zip(ops,opEmoji)}
 									await context.message.channel.send("{} Transfer{} {}".format(str(reaction.emoji),'s' if allOnly or len(torrents) > 1 else '', ops[cmd]))
 									await msg.clear_reactions()
-									await msg2.clear_reactions()
+									if msg2 is not None:
+										await msg2.clear_reactions()
 									return
 								else:
 									await context.message.channel.send("❌ Cancelled!")
 									await msg.clear_reactions()
-									await msg2.clear_reactions()
+									if msg2 is not None:
+										await msg2.clear_reactions()
 									return
 	
 		def check(reaction, user):
@@ -1243,7 +1246,8 @@ async def modify(context, *, content=""):
 				cmdNames = {i:j for i,j in zip(opEmoji,opNames)}
 				cmd = cmds[str(reaction.emoji)]
 				cmdName = cmdNames[str(reaction.emoji)]
-			
+				
+				msg2 = None
 				doContinue = True
 				if "remove" in cmds[str(reaction.emoji)]:
 					embed=discord.Embed(title="Are you sure you wish to remove{} {} transfer{}?".format(' and DELETE' if 'delete' in cmds[str(reaction.emoji)] else '', len(torrents), '' if len(torrents)==1 else 's'),description="**This action is irreversible!**",color=0xb51a00)
@@ -1283,12 +1287,14 @@ async def modify(context, *, content=""):
 					opEmoji = {i:j for i,j in zip(ops,opEmoji)}
 					await context.message.channel.send("{} Transfer{} {}".format(str(reaction.emoji),'s' if allOnly or len(torrents) > 1 else '', ops[cmd]))
 					await msg.clear_reactions()
-					await msg2.clear_reactions()
+					if msg2 is not None:
+						await msg2.clear_reactions()
 					return
 				else:
 					await context.message.channel.send("❌ Cancelled!")
 					await msg.clear_reactions()
-					await msg2.clear_reactions()
+					if msg2 is not None:
+						await msg2.clear_reactions()
 					return
 					
 		await msg.clear_reactions()
