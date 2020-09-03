@@ -751,20 +751,20 @@ async def summary(context, *, content="", repeat_msg_key=None):
 				if r.count > 1:
 					async for user in r.users():
 						if user.id in WHITELIST:
-							if str(r.emoji) == stateEmoji[0]:
+							if str(r.emoji) == '📜':
+								await msg.clear_reaction('📜')
 								await legend(context)
 								return
-							elif str(r.emoji) == stateEmoji[1]:
-								if repeat_msg_key:
-									REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
-									return
-								else:
-									await msg.clear_reaction('🔄')
-									await repeat_command(summary, context=context, content=content, msg_list=[msg])
-									return
+							elif str(r.emoji) == '❎':
+								await msg.clear_reactions()
+								REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
+								return
+							elif str(r.emoji) == '🔄':
+								await msg.clear_reaction('🔄')
+								await repeat_command(summary, context=context, content=content, msg_list=[msg])
+								return
 							elif str(r.emoji) in stateEmoji[stateEmojiFilterStartNum-1:] and user.id == context.message.author.id:
-								if repeat_msg_key:
-									REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
+								await msg.clear_reaction(str(r.emoji))
 								await list_transfers(context, content=torStateFilters[str(r.emoji)])
 								return
 		
@@ -774,17 +774,21 @@ async def summary(context, *, content="", repeat_msg_key=None):
 		try:
 			reaction, user = await client.wait_for('reaction_add', timeout=60.0 if not repeat_msg_key else REPEAT_MSGS[repeat_msg_key]['freq'], check=check)
 		except asyncio.TimeoutError:
+			if not repeat_msg_key:
+				await msg.clear_reactions()
+				return
 			pass
 		else:
 			if str(reaction.emoji) in stateEmoji[stateEmojiFilterStartNum-1:] and str(reaction.emoji) not in ignoreEmoji:
-				if repeat_msg_key:
-					REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
+				await msg.clear_reaction(str(reaction.emoji))
 				await list_transfers(context, content=torStateFilters[str(reaction.emoji)])
 				return
-			elif str(reaction.emoji) == stateEmoji[0]:
+			elif str(reaction.emoji) == '📜':
+				await msg.clear_reaction('📜')
 				await legend(context)
 				return
 			elif str(reaction.emoji) == '❎':
+				await msg.clear_reactions()
 				REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
 				return
 			elif str(reaction.emoji) == '🔄':
@@ -792,24 +796,29 @@ async def summary(context, *, content="", repeat_msg_key=None):
 				await repeat_command(summary, context=context, content=content, msg_list=[msg])
 				return
 			elif str(reaction.emoji) == '🖨':
-				REPEAT_MSGS[repeat_msg_key]['reprint'] = True
 				await msg.clear_reaction('🖨')
+				REPEAT_MSGS[repeat_msg_key]['reprint'] = True
+				return
 		if repeat_msg_key: # a final check to see if the user has cancelled the repeat by checking the count of the cancel reaction
 			cache_msg = await context.message.channel.fetch_message(msg.id)
 			for r in cache_msg.reactions:
 				if r.count > 1:
-					if str(r.emoji) == '❎':
-						async for user in r.users():
-							if user.id == context.message.author.id:
+					async for user in r.users():
+						if user.id in WHITELIST:
+							if str(reaction.emoji) == '📜':
+								await msg.clear_reaction('📜')
+								await legend(context)
+								return
+							elif str(r.emoji) == '❎':
+								await msg.clear_reactions()
 								REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
 								return
-					elif str(r.emoji) == '🖨':
-						REPEAT_MSGS[repeat_msg_key]['reprint'] = True
-						await msg.clear_reaction('🖨')
-					elif str(r.emoji) in stateEmoji[stateEmojiFilterStartNum-1:]:
-						async for user in r.users():
-							if user.id == context.message.author.id:
-								REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
+							elif str(r.emoji) == '🖨':
+								await msg.clear_reaction('🖨')
+								REPEAT_MSGS[repeat_msg_key]['reprint'] = True
+								return
+							elif str(r.emoji) in stateEmoji[stateEmojiFilterStartNum-1:]:
+								await msg.clear_reaction(str(r.emoji))
 								await list_transfers(context, content=torStateFilters[str(r.emoji)])
 								return
 
@@ -847,7 +856,7 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 			down = humanbytes(t.progress * 0.01 * t.totalSize, d=0)
 			out = "{}{} ".format(stateEmoji[t.status],errorStrs[t.error] if t.error != 0 else '')
 			if t.status == 'downloading':
-				out += "{}%{} {}{}/s:*{}/s*:{:.1f}".format(int(t.progress), down, '' if eta <= 0 else '{}@'.format(humanseconds(eta)), humanbytes(t.rateDownload, d=0), humanbytes(t.rateUpload, d=0), t.uploadRatio)
+				out += "{}% {} {}{}/s{}".format(int(t.progress), down, '' if eta <= 0 else '{}@'.format(humanseconds(eta)), humanbytes(t.rateDownload, d=0), ' *{}/s* {:.1f}'.format(humanbytes(t.rateUpload, d=0), t.uploadRatio) if t.isStalled else '')
 			elif t.status == 'seeding':
 				out += "{} *{}/s*:{:.1f}".format(down, humanbytes(t.rateUpload, d=0), t.uploadRatio)
 			elif t.status == 'stopped':
@@ -867,7 +876,7 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 				out += "⏬ {} ⚖️ {:.2f}".format(humanbytes(t.totalSize),t.uploadRatio)
 		
 			if t.error != 0:
-				out += "***Error:*** *{}*".format(t.errorString)
+				out += "\n***Error:*** *{}*".format(t.errorString)
 		return out
 	
 	if COMPACT_OUTPUT:
@@ -1063,29 +1072,41 @@ async def list_transfers(context, *, content="", repeat_msg_key=None):
 			pass
 		else:
 			if str(reaction.emoji) == '📜':
+				await msg.clear_reaction('📜')
 				await legend(context)
+				return
 			elif str(reaction.emoji) == '🖨':
-				REPEAT_MSGS[repeat_msg_key]['reprint'] = True
 				await msg.clear_reaction('🖨')
+				REPEAT_MSGS[repeat_msg_key]['reprint'] = True
+				return
 			elif str(reaction.emoji) == '❎':
+				await msg.clear_reactions()
 				REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
 				return
 			elif str(reaction.emoji) == '🔄':
 				await msg.clear_reaction('🔄')
 				await repeat_command(list_transfers, context=context, content=content, msg_list=msgs)
 				return
+				
 		if repeat_msg_key: # a final check to see if the user has cancelled the repeat by checking the count of the cancel reaction
 			cache_msg = await context.message.channel.fetch_message(msg.id)
 			for r in cache_msg.reactions:
 				if r.count > 1:
-					if str(r.emoji) == '🖨':
-						REPEAT_MSGS[repeat_msg_key]['reprint'] = True
-						await msg.clear_reaction('🖨')
-					elif str(r.emoji) == '❎':
-						async for user in r.users():
-							if user.id in WHITELIST:
+					async for user in r.users():
+						if user.id in WHITELIST:
+							if str(r.emoji) == '🖨':
+								REPEAT_MSGS[repeat_msg_key]['reprint'] = True
+								await msg.clear_reaction('🖨')
+							elif str(r.emoji) == '📜':
+								await msg.clear_reaction('📜')
+								await legend(context)
+								return
+							elif str(r.emoji) == '❎':
+								await msg.clear_reactions()
 								REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
 								return
+		else: # not a repeat message, so no need to keep the reactions
+			await msg.clear_reactions()
 
 @client.command(name='modify', aliases=['m'], pass_context=True)
 async def modify(context, *, content=""):
@@ -1164,16 +1185,18 @@ async def modify(context, *, content=""):
 								if "remove" in cmds[str(reaction.emoji)]:
 									embed=discord.Embed(title="Are you sure you wish to remove{} {} transfer{}?".format(' and DELETE' if 'delete' in cmds[str(reaction.emoji)] else '', len(torrents), '' if len(torrents)==1 else 's'),description="**This action is irreversible!**",color=0xb51a00)
 									embed.set_footer(text="react ✅ to continue or ❌ to cancel")
-									msg = await context.message.channel.send(embed=embed)
+									msg2 = await context.message.channel.send(embed=embed)
 	
 									for i in ['✅','❌']:
-										await msg.add_reaction(i)
+										await msg2.add_reaction(i)
 					
 									def check1(reaction, user):
-										return user == context.message.author and str(reaction.emoji) in ['✅','❌']
+										return user == context.message.author and reaction.message.id == msg2.id and str(reaction.emoji) in ['✅','❌']
 									try:
 										reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check1)
 									except asyncio.TimeoutError:
+										await msg.clear_reactions()
+										await msg2.clear_reactions()
 										doContinue = False
 									else:
 										doContinue = str(reaction.emoji) == '✅'
@@ -1194,20 +1217,26 @@ async def modify(context, *, content=""):
 									ops = {i:j for i,j in zip(ops,opNames)}
 									opEmoji = {i:j for i,j in zip(ops,opEmoji)}
 									await context.message.channel.send("{} Transfer{} {}".format(str(reaction.emoji),'s' if allOnly or len(torrents) > 1 else '', ops[cmd]))
+									await msg.clear_reactions()
+									await msg2.clear_reactions()
 									return
 								else:
 									await context.message.channel.send("❌ Cancelled!")
+									await msg.clear_reactions()
+									await msg2.clear_reactions()
 									return
 	
 		def check(reaction, user):
-			return user == context.message.author and str(reaction.emoji) in opEmoji
+			return user == context.message.author and reaction.message.id == msg.id and str(reaction.emoji) in opEmoji
 	
 		try:
 			reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check)
 		except asyncio.TimeoutError:
+			await msg.clear_reactions()
 			return
 		else:
 			if str(reaction.emoji) == opEmoji[-1]:
+				await msg.clear_reactions()
 				await legend(context)
 			elif str(reaction.emoji) in opEmoji[:-1]:
 				cmds = {i:j for i,j in zip(opEmoji,ops)}
@@ -1219,16 +1248,18 @@ async def modify(context, *, content=""):
 				if "remove" in cmds[str(reaction.emoji)]:
 					embed=discord.Embed(title="Are you sure you wish to remove{} {} transfer{}?".format(' and DELETE' if 'delete' in cmds[str(reaction.emoji)] else '', len(torrents), '' if len(torrents)==1 else 's'),description="**This action is irreversible!**",color=0xb51a00)
 					embed.set_footer(text="react ✅ to continue or ❌ to cancel")
-					msg = await context.message.channel.send(embed=embed)
+					msg2 = await context.message.channel.send(embed=embed)
 	
 					for i in ['✅','❌']:
-						await msg.add_reaction(i)
+						await msg2.add_reaction(i)
 					
 					def check1(reaction, user):
-						return user == context.message.author and str(reaction.emoji) in ['✅','❌']
+						return user == context.message.author and reaction.message.id == msg2.id and str(reaction.emoji) in ['✅','❌']
 					try:
 						reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check1)
 					except asyncio.TimeoutError:
+						await msg.clear_reactions()
+						await msg2.clear_reactions()
 						doContinue = False
 					else:
 						doContinue = str(reaction.emoji) == '✅'
@@ -1243,16 +1274,24 @@ async def modify(context, *, content=""):
 					else:
 						remove_torrents(torrents,delete_files="delete" in cmd)
 					
+					
+					
 					ops = ["pause","resume","remove","removedelete","pauseall","resumeall","verify"]
 					opNames = ["paused","resumed","removed","removed and deleted","paused","resumed","queued for verification"]
 					opEmoji = ["⏸","▶️","❌","🗑","⏸","▶️","🩺"]
 					ops = {i:j for i,j in zip(ops,opNames)}
 					opEmoji = {i:j for i,j in zip(ops,opEmoji)}
 					await context.message.channel.send("{} Transfer{} {}".format(str(reaction.emoji),'s' if allOnly or len(torrents) > 1 else '', ops[cmd]))
+					await msg.clear_reactions()
+					await msg2.clear_reactions()
 					return
 				else:
 					await context.message.channel.send("❌ Cancelled!")
+					await msg.clear_reactions()
+					await msg2.clear_reactions()
 					return
+					
+		await msg.clear_reactions()
 
 @client.command(name='compact', aliases=['c'], pass_context=True)
 async def toggle_compact_out(context):
