@@ -1462,13 +1462,13 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 			down = humanbytes(t.progress * 0.01 * t.totalSize)
 			out = "{} {} {} {} ".format(stateEmoji[t.status],errorStrs[t.error],'🚀' if t.rateDownload + t.rateUpload > 0 else '🐢' if t.isStalled else '🐇', '🔐' if t.isPrivate else '🔓')
 			if t.status == 'downloading':
-				out += "⏬ {}/{} ({:.1f}%) {}⬇️ {}/s ⬆️ *{}/s* ⚖️ *{:.2f}*".format(down,humanbytes(t.totalSize),t.progress, '' if eta <= 0 else '\n⏳ {} @ '.format(humanseconds(eta)), humanbytes(t.rateDownload),humanbytes(t.rateUpload),t.uploadRatio)
+				out += "{:.1f}% of {} ⏬ {} {}/s ⬇️ *{}/s* ⬆️ *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), '' if eta <= 0 else '⏳ {} @ '.format(humanseconds(eta)), humanbytes(t.rateDownload), humanbytes(t.rateUpload), t.uploadRatio)
 			elif t.status == 'seeding':
-				out += "⏬ {} ⬆️ *{}/s* ⚖️ *{:.2f}*".format(humanbytes(t.totalSize),humanbytes(t.rateUpload),t.uploadRatio)
+				out += "{} ⏬ *{}/s* ⬆️ *{:.2f}* ⚖️".format(humanbytes(t.totalSize, d=1), humanbytes(t.rateUpload), t.uploadRatio)
 			elif t.status == 'stopped':
-				out += "⏬ {}/{} ({:.1f}%) ⚖️ *{:.2f}*".format(down,humanbytes(t.totalSize),t.progress,t.uploadRatio)
+				out += "{:.1f}% of {} ⏬ *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), t.uploadRatio)
 			elif t.status == 'finished':
-				out += "⏬ {} ⚖️ {:.2f}".format(humanbytes(t.totalSize),t.uploadRatio)
+				out += "{} ⏬ {:.2f} ⚖️".format(humanbytes(t.totalSize, d=1), t.uploadRatio)
 			elif t.status == "checking":
 				out += "{:.2f}%".format(t.recheckProgress*100.0)
 		
@@ -1484,16 +1484,19 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 	
 	n = 0
 	i = 0
+	eNum = 1
+	eNumTotal = 1 + len(torrents) // 25
 	embeds = []
 	if len(torrents) > 0:
 		while i < len(torrents):
-			embed=discord.Embed(title=title,description=description,color=0xb51a00)
+			embed=discord.Embed(title=title + ('' if eNumTotal == 1 else ' ({} of {})'.format(eNum, eNumTotal)),description=description,color=0xb51a00)
 			for j in range(25):
 				embed.add_field(name=nameList[i],value=valList[i],inline=False)
 				i += 1
 				n += 1
 				if n >= 25:
 					n = 0
+					eNum += 1
 					break
 				if i >= len(torrents):
 					break
