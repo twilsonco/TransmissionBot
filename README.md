@@ -7,7 +7,7 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 * [Add transfers](#add)
 * [Modify existing transfers](#modify)
 * [Check transfer status](#status) (with optional realtime updating of output)
-* [Notifications for transfer state changes](#notifications)
+* [Notification system for transfer state changes](#notifications)
 * [Pretty output and highly configurable](#pretty)
 * [Easy setup](#setup)
 * [`t/help` for usage information](#help)
@@ -41,15 +41,10 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 		* replace `<permissions>` with the minimum permissions `92224`(*for send messages, manage messages, embed links, read message history, and add rections*) or administrator permissions `9` to keep things simple
 	2. Invite the bot to your server
 2. Configure `bot.py`
-	1. Set discord options
-		* `TOKEN` to your bot secret token
-		* Lists of `OWNERS`, `BLACKLIST` and/or `WHITELIST` users, and `CHANNEL_IDS` on which the bot should listen for commands
-			* get these ids by [enabling developer mode in your Discord client](https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID-) and right-clicking on a user/channel
-		* Pick a `BOT_PREFIX` (default is `t/`)
-	2. Set Transmission client information
-		* `TSCLIENT_CONFIG` points to the Transmission web interface you already setup
-		* Set `DRYRUN` to `True` to enable the discord bot to *actually* make changes to existing transfers
-		* Pick a location for the logfile on line 45
+	1. Set values in the `CONFIG` variable, which are described inline
+		* After first run, a `config.json` file will be created in the same directory as `bot.py`. This file should then be used to make any configuration changes, and the definition of `CONFIG` in `bot.py` should be commented out or removed.
+	2. Configure logging
+		* Pick a location for the logfile on line 112
 		* Optionally disable logging by setting the log level to `logger.CRITICAL` which isn't used anywhere
 3. Run with `python3 /path/to/TransmissionBot/bot.py` and enjoy!
 
@@ -85,7 +80,7 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 * Use other reactions to print filtered lists of transfers
 * Print symbol `t/legend`
 
-### <a name="notifications">Notifications for transfer state changes</a>
+### <a name="notifications">Notification system for transfer state changes</a>
 * Print notifications regarding transfer state changes in a text channel and through DMs
 * Users are notified through DM about transfers they added
 * Can opt in to DM notifications for other transfers by reacting with 🔔 to `t/list` message or in-channel notifications
