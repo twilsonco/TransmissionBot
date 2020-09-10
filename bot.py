@@ -1661,9 +1661,9 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 					del msgs[-1]
 			REPEAT_MSGS[repeat_msg_key]['msgs'] = msgs
 			if message.channel.last_message_id != msgs[-1].id:
-				rxnEmoji = ['📜','🖨','❎']
+				rxnEmoji = ['📜','🖨','❎','🔔','🔕']
 			else:
-				rxnEmoji = ['📜','❎']
+				rxnEmoji = ['📜','❎','🔔','🔕']
 		else:
 			msgs = [await message.channel.send(embed=e) for e in embeds]
 			if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
