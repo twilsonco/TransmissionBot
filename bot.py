@@ -1112,7 +1112,7 @@ async def add(message, content = ""):
 			except:
 				await message.channel.send('‼️ Error communicating with Transmission ‼️')
 				return
-			torStr.append("From file: {}".format(tor.name))
+			torStr.append("📄 {}".format(tor.name))
 			
 		for t in content.strip().split(" "):
 			if len(t) > 5:
@@ -1128,7 +1128,7 @@ async def add(message, content = ""):
 				except:
 					await message.channel.send('‼️ Error communicating with Transmission ‼️')
 					return
-				torStr.append("From link: {}".format(tor.name))
+				torStr.append("🧲 {}".format(tor.name))
 				
 		if len(torStr) > 0:
 			await message.channel.send('🟢 Added torrent{}:\n{}'.format("s" if len(torStr) > 1 else "", '\n'.join(torStr)))
