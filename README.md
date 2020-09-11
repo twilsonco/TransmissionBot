@@ -13,13 +13,8 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 * [`t/help` for usage information](#help)
 
 ## Example images
-* Transfer summary (and symbol legend)
 
-![summary](https://github.com/twilsonco/TransmissionBot/blob/master/out-summary.png)
-
-* Modifying existing transfers
-
-![modify](https://github.com/twilsonco/TransmissionBot/blob/master/out-modify.png)
+![example images](https://github.com/twilsonco/TransmissionBot/blob/master/example%20images.png)
 
 
 ## Install
