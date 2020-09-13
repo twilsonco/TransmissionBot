@@ -50,6 +50,9 @@ CONFIG = {
     "blacklist_user_ids": [], # discord users disallowed to use bot
     "owner_user_ids": [], # discord users given full access
 	"private_transfers_protected": True, # prevent transfers on private trackers from being removed
+	"whitelist_user_can_remove": True, # if true, whitelisted users can remove any transfer
+	"whitelist_user_can_delete": True, # if true, whitelisted users can remove and delete any transfer
+	"whitelist_added_user_remove_delete_override": True, # if true, override both 'whitelist_user_can_remove' and 'whitelist_user_can_delete' allowing whitelisted users to remove and delete transfers they added
     "bot_prefix": "t/", # bot command prefix
     "bot_token": "BOT_TOKEN", # bot token
     "dryrun": False, # if true, no changes are actually applied to transfers
@@ -1847,6 +1850,46 @@ async def modify(message, content=""):
 									if len(removeTorrents) != len(torrents):
 										torrents = removeTorrents
 										footerPrepend = "(I'm not allowed to remove private transfers, but I'll do the public ones)\n"
+								if "delete" in cmds[str(reaction.emoji)] and not CONFIG['whitelist_user_can_delete'] and message.author.id not in CONFIG['owner_user_ids']:
+									# user may not be allowed to perform this operation. Check if they added any transfers, and whether the added_user_override is enabled.
+									if CONFIG['whitelist_added_user_remove_delete_override']:
+										# override is enabled, so reduce the list of torrents to be modified to those added by the user.
+										# first get transfers from TORRENT_JSON
+										oldTorrents = load_json(path=TORRENT_JSON)
+										removeTorrents = [t for t in torrents if (t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id)]
+										if len(removeTorrents) != len(torrents):
+											if len(removeTorrents) > 0:
+												torrents = removeTorrents
+												footerPrepend = "(You can only remove and delete transfers added by you. Other transfers won't be affected.)\n"
+											else:
+												await message.channel.send("🚫 You can only remove and delete transfers added by you. If this isn't right, ask an admin to add you to the bot owner list.")
+												await message_clear_reactions(msg, message)
+												return
+									else:
+										# override not enabled, so user can't perform this operation
+										await message.channel.send("🚫 You're not allowed to remove and delete transfers. If this isn't right, ask an admin to add you to the bot owner list or to enable the override for transfers added by you.")
+										await message_clear_reactions(msg, message)
+										return
+								elif not CONFIG['whitelist_user_can_remove'] and message.author.id not in CONFIG['owner_user_ids']:
+									# user may not be allowed to perform this operation. Check if they added any transfers, and whether the added_user_override is enabled.
+									if CONFIG['whitelist_added_user_remove_delete_override']:
+										# override is enabled, so reduce the list of torrents to be modified to those added by the user.
+										# first get transfers from TORRENT_JSON
+										oldTorrents = load_json(path=TORRENT_JSON)
+										removeTorrents = [t for t in torrents if (t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id)]
+										if len(removeTorrents) != len(torrents):
+											if len(removeTorrents) > 0:
+												torrents = removeTorrents
+												footerPrepend = "(You can only remove transfers added by you. Other transfers won't be affected.)\n"
+											else:
+												await message.channel.send("🚫 You can only remove transfers added by you. If this isn't right, ask an admin to add you to the bot owner list.")
+												await message_clear_reactions(msg, message)
+												return
+									else:
+										# override not enabled, so user can't perform this operation
+										await message.channel.send("🚫 You're not allowed to remove transfers. If this isn't right, ask an admin to add you to the bot owner list or to enable the override for transfers added by you.")
+										await message_clear_reactions(msg, message)
+										return
 								embed=discord.Embed(title="Are you sure you wish to remove{} {} transfer{}?".format(' and DELETE' if 'delete' in cmds[str(reaction.emoji)] else '', len(torrents), '' if len(torrents)==1 else 's'),description="**This action is irreversible!**",color=0xb51a00)
 								embed.set_footer(text=footerPrepend + "React ✅ to continue or ❌ to cancel")
 								msg2 = await message.channel.send(embed=embed)
@@ -1913,6 +1956,52 @@ async def modify(message, content=""):
 				msg2 = None
 				doContinue = True
 				if "remove" in cmds[str(reaction.emoji)]:
+					footerPrepend = ""
+					if CONFIG['private_transfers_protected']:
+						removeTorrents = [t for t in torrents if not t.isPrivate]
+						if len(removeTorrents) != len(torrents):
+							torrents = removeTorrents
+							footerPrepend = "(I'm not allowed to remove private transfers, but I'll do the public ones)\n"
+					if "delete" in cmds[str(reaction.emoji)] and not CONFIG['whitelist_user_can_delete'] and message.author.id not in CONFIG['owner_user_ids']:
+						# user may not be allowed to perform this operation. Check if they added any transfers, and whether the added_user_override is enabled.
+						if CONFIG['whitelist_added_user_remove_delete_override']:
+							# override is enabled, so reduce the list of torrents to be modified to those added by the user.
+							# first get transfers from TORRENT_JSON
+							oldTorrents = load_json(path=TORRENT_JSON)
+							removeTorrents = [t for t in torrents if (t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id)]
+							if len(removeTorrents) != len(torrents):
+								if len(removeTorrents) > 0:
+									torrents = removeTorrents
+									footerPrepend = "(You can only remove and delete transfers added by you. Other transfers won't be affected.)\n"
+								else:
+									await message.channel.send("🚫 You can only remove and delete transfers added by you. If this isn't right, ask an admin to add you to the bot owner list.")
+									await message_clear_reactions(msg, message)
+									return
+						else:
+							# override not enabled, so user can't perform this operation
+							await message.channel.send("🚫 You're not allowed to remove and delete transfers. If this isn't right, ask an admin to add you to the bot owner list or to enable the override for transfers added by you.")
+							await message_clear_reactions(msg, message)
+							return
+					elif not CONFIG['whitelist_user_can_remove'] and message.author.id not in CONFIG['owner_user_ids']:
+						# user may not be allowed to perform this operation. Check if they added any transfers, and whether the added_user_override is enabled.
+						if CONFIG['whitelist_added_user_remove_delete_override']:
+							# override is enabled, so reduce the list of torrents to be modified to those added by the user.
+							# first get transfers from TORRENT_JSON
+							oldTorrents = load_json(path=TORRENT_JSON)
+							removeTorrents = [t for t in torrents if (t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id)]
+							if len(removeTorrents) != len(torrents):
+								if len(removeTorrents) > 0:
+									torrents = removeTorrents
+									footerPrepend = "(You can only remove transfers added by you. Other transfers won't be affected.)\n"
+								else:
+									await message.channel.send("🚫 You can only remove transfers added by you. If this isn't right, ask an admin to add you to the bot owner list.")
+									await message_clear_reactions(msg, message)
+									return
+						else:
+							# override not enabled, so user can't perform this operation
+							await message.channel.send("🚫 You're not allowed to remove transfers. If this isn't right, ask an admin to add you to the bot owner list or to enable the override for transfers added by you.")
+							await message_clear_reactions(msg, message)
+							return
 					embed=discord.Embed(title="Are you sure you wish to remove{} {} transfer{}?".format(' and DELETE' if 'delete' in cmds[str(reaction.emoji)] else '', len(torrents), '' if len(torrents)==1 else 's'),description="**This action is irreversible!**",color=0xb51a00)
 					embed.set_footer(text="react ✅ to continue or ❌ to cancel")
 					msg2 = await message.channel.send(embed=embed)
