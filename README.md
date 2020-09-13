@@ -1,5 +1,5 @@
 # Transmission Discord Bot
-A python Discord bot for controlling an instance of [Transmission](https://transmissionbt.com), the bittorrent client, using the [transmissionrpc](https://pythonhosted.org/transmissionrpc/) python library.
+A python [Discord.py](https://github.com/Rapptz/discord.py) bot for controlling an instance of [Transmission](https://transmissionbt.com), the bittorrent client, using the [transmissionrpc](https://pythonhosted.org/transmissionrpc/) python library.
 This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Python-Discord-Bot-Template) and adapted from [leighmacdonald's transmission scripts](https://github.com/leighmacdonald/transmission_scripts).
 
 ## Features overview
@@ -13,8 +13,13 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 * [`t/help` for usage information](#help)
 
 ## Example images
+* Transfer summary (and symbol legend)
 
-![example images](https://github.com/twilsonco/TransmissionBot/blob/master/example%20images.png)
+![summary](https://github.com/twilsonco/TransmissionBot/blob/master/out-summary.png)
+
+* Modifying existing transfers
+
+![modify](https://github.com/twilsonco/TransmissionBot/blob/master/out-modify.png)
 
 
 ## Install
@@ -90,6 +95,7 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 * Use of Embeds and unicode symbols where appropriate.
 * Remove reactions from messages when no longer necessary for prettier scroll-back (in-channel only, not through DM)
 * Configure user access using whitelist, blacklist and owner list
+	* Control whether whitelisted users are able to remove and/or delete transfers (with optional override specifically for transfers added by the user)
 * Protect transfers using private trackers from removal
 * Set realtime update and notification frequency
 * Set realtime update timeout
@@ -139,6 +145,7 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 
 ## Thanks to:
 
+* Rapptz
 * kkrypt0nn
 * leighmacdonald
 
