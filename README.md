@@ -124,18 +124,18 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 * Combine the `list` and `modify` commands in the code, with a simple parameter to specify whether or not modification is allowed
 * Currently, searching by name is done with case-insensitive regex. Update to that if a user includes upper case characters, case-sensitive search is performed
 * ~~Add recurring list option. Ie every five seconds replace `list` output with fresh output. This would be done by reacting to a "repeat" emoji to initiate repetition of the current search~~ (also did this for `summary`)
-* ~~Add additional filtering options: stalled, error, non-zero up/down rate.
+* ~~Add additional filtering options: stalled, error, non-zero up/down rate.~~
 * Add shorthand for filtering options (downloading/seeding/stalled/paused become d/s/i/p etc., that's i for "idle" since s is for seeding)
 * Add a `top` command that'sessentially a combination of the up/down rate filter and the repeating output features 
 * Ability to refine `list` output with filter or sort using reactions; ie click a filter or sort reaction which triggers another message with additional reactions to click to apply the extra filters or sort
 * Ability to specify which files to include in download (we'll see about that; sounds clunky but maybe using file ID specifiers *e.g.* `1,3-5,8`)
-* ~~Notifications for when a transfer finishes/stalls/errors
-	* ~~via DM to the user that added the transfer
-	* ~~or by posting to the channel from which a transfer was added
-	* ~~Let other users opt to receive notifications for transfers they *didn't* add
+* ~~Notifications for when a transfer finishes/stalls/errors~~
+	* ~~via DM to the user that added the transfer~~
+	* ~~or by posting to the channel from which a transfer was added~~
+	* ~~Let other users opt to receive notifications for transfers they *didn't* add~~
 * Post-download file management (*never going to happen...*)
 	* Compress files (encrypted) and make available for direct download from server via download link posted to channel or DM'd to user
-* ~~Use JSON config file so that updating is non-destructive
+* ~~Use JSON config file so that updating is non-destructive~~
 * Add `set` command so owners can edit configuration through Discord
 * ~~Add a toggle for minimalised output for better display on mobile devices. Toggle using `t/compact` as standalone command or by clicking a 📱 reaction. Store as global variable so all commands output can be affected.~~
 
