@@ -1465,7 +1465,7 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 			down = humanbytes(t.progress * 0.01 * t.totalSize)
 			out = "{} {} {} {} ".format(stateEmoji[t.status],errorStrs[t.error],'🚀' if t.rateDownload + t.rateUpload > 0 else '🐢' if t.isStalled else '🐇', '🔐' if t.isPrivate else '🔓')
 			if t.status == 'downloading':
-				out += "{:.1f}% of {} ⏬ {} {}/s ⬇️ *{}/s* ⬆️ *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), '' if eta <= 0 else '⏳ {} @ '.format(humanseconds(eta)), humanbytes(t.rateDownload), humanbytes(t.rateUpload), t.uploadRatio)
+				out += "{:.1f}% of {} ⏬ {} {}/s ⬇️ *{}/s* ⬆️ *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), '' if eta <= 0 else '\n⏳ {} @ '.format(humanseconds(eta)), humanbytes(t.rateDownload), humanbytes(t.rateUpload), t.uploadRatio)
 			elif t.status == 'seeding':
 				out += "{} ⏬ *{}/s* ⬆️ *{:.2f}* ⚖️".format(humanbytes(t.totalSize, d=1), humanbytes(t.rateUpload), t.uploadRatio)
 			elif t.status == 'stopped':
