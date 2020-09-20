@@ -390,6 +390,8 @@ def make_client():
 	:return:
 	"""
 	global MAKE_CLIENT_FAILED
+	tsclient = None
+	lock()
 	try:
 		tsclient = TSClient(
 			TSCLIENT_CONFIG['host'],
@@ -398,10 +400,12 @@ def make_client():
 			password=TSCLIENT_CONFIG['password']
 		)
 		MAKE_CLIENT_FAILED = False
-		return tsclient
-	except:
+	except Exception as e:
+		logger.error("Failed to make TS client: {}".format(e))
 		MAKE_CLIENT_FAILED = True
-		return None
+	finally:
+		unlock()
+		return tsclient
 
 		
 def reload_client():
@@ -787,11 +791,27 @@ def prepare_notifications(changedTransfers, states=CONFIG['notification_states']
 						torrents[h] = t
 					
 					nameStr = d['name'].format(n, '' if n == 1 else 's')
-					valStr = ',\n'.join(["{}{}".format("**{}.**".format(i+1) if n > 1 else '', t['name'], "\n (error: *{}*)".format(t['errorString']) if t['errorString'] != "" else "") for i,t in enumerate(d['data'].values())])
+					vals = ["{}{}".format("**{}.**".format(i+1) if n > 1 else '', t['name'], "\n (error: *{}*)".format(t['errorString']) if t['errorString'] != "" else "") for i,t in enumerate(d['data'].values())]
+					valStr = ',\n'.join(vals)
 					
 					if len(embeds[-1]) + len(nameStr) + len(valStr) >= 6000:
 						embeds.append(discord.Embed(title=""))
 						embeds[-1].timestamp = ts
+					if len(nameStr) + len(valStr) > 1000:
+						valStr = ""
+						for i,v in enumerate(vals):
+							if len(embeds[-1]) + len(nameStr) + len(valStr) + len(v) >= 6000:
+								embeds.append(discord.Embed(title=""))
+								embeds[-1].timestamp = ts
+							if len(nameStr) + len(valStr) + len(v) > 1000:
+								embeds[-1].add_field(name=nStr, value=valStr, inline=False)
+								nameStr = ""
+								valStr = ""
+							else:
+								valStr += v
+								if i < len(vals) - 1:
+									valStr += ",\n"
+						pass
 				
 					embeds[-1].add_field(name=nameStr, value=valStr, inline=False)
 		return embeds, nTotal, torrents
@@ -916,7 +936,10 @@ async def run_notifications():
 async def loop_notifications():
 	while CONFIG['notification_enabled']:
 		# print("looping notifications")
-		await run_notifications()
+		try:
+			await run_notifications()
+		except Exception as e:
+			logger.error("Exception thrown in run_notifications: {}".format(e))
 		await asyncio.sleep(CONFIG['notification_freq'])
 	return
 	
@@ -951,7 +974,7 @@ async def on_ready():
 		await client.change_presence(activity=discord.Game("client load error!"))
 	else:
 		# client.loop.create_task(status_task())
-		await client.change_presence(activity=discord.Game("{}help".format(CONFIG['bot_prefix'])))
+		await client.change_presence(activity=discord.Game("Listening {}help".format(CONFIG['bot_prefix'])))
 		print('Logged in as ' + client.user.name)
 		print("Discord.py API version:", discord.__version__)
 		print("Python version:", platform.python_version())
@@ -1263,6 +1286,9 @@ async def summary(message, content="", repeat_msg_key=None):
 				await message.delete()
 			except:
 				pass
+		
+		if TSCLIENT is None:
+			reload_client()
 		
 		stateEmojiFilterStartNum = 3 # the first emoji in stateEmoji that corresponds to a list filter
 		ignoreEmoji = ('✅')
@@ -1596,7 +1622,8 @@ async def repeat_command(command, message, content="", msg_list=[]):
 			else:
 				try:
 					await msg['command'](message=msg['message'], content=msg['content'], repeat_msg_key=msg_key)
-				except:
+				except Exception as e:
+					logger.warning("Failed to execute repeat command {}(content={}): {}".format(msg['command'], msg['content'], e))
 					await asyncio.sleep(CONFIG['repeat_freq'])
 		else:
 			if msg['cancel_verbose']:
@@ -1633,6 +1660,9 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 				await message.delete()
 			except:
 				pass
+		
+		if TSCLIENT is None:
+			reload_client()
 		
 		torrents = TSCLIENT.get_torrents_by(sort_by=sort_by, filter_by=filter_by, filter_regex=filter_regex, id_list=id_list, num_results=num_results)
 		
@@ -1787,6 +1817,9 @@ async def modify(message, content=""):
 				await message.delete()
 			except:
 				pass
+			
+			if TSCLIENT is None:
+				reload_client()
 			
 			if len(REPEAT_MSGS) == 0:
 				reload_client()
