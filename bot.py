@@ -49,6 +49,7 @@ CONFIG = {
     "whitelist_user_ids": [], # discord users allowed to use bot
     "blacklist_user_ids": [], # discord users disallowed to use bot
     "owner_user_ids": [], # discord users given full access
+	 "delete_command_messages": False, # delete command messages from users
 	"private_transfers_protected": True, # prevent transfers on private trackers from being removed
 	"whitelist_user_can_remove": True, # if true, whitelisted users can remove any transfer
 	"whitelist_user_can_delete": True, # if true, whitelisted users can remove and delete any transfer
@@ -365,6 +366,14 @@ class TSClient(transmissionrpc.Client):
 						torrents = [t for t in torrents if not t.isPrivate]
 					elif f == "error":
 						torrents = [t for t in torrents if t.error != 0]
+					elif f == "err_none":
+						torrents = [t for t in torrents if t.error == 0]
+					elif f == "err_tracker_warn":
+						torrents = [t for t in torrents if t.error == 1]
+					elif f == "err_tracker_error":
+						torrents = [t for t in torrents if t.error == 2]
+					elif f == "err_local":
+						torrents = [t for t in torrents if t.error == 3]
 					elif f == "running":
 						torrents = [t for t in torrents if t.rateDownload + t.rateUpload > 0]
 					else:
@@ -1119,10 +1128,11 @@ async def add(message, content = ""):
 		if content == "" and len(torFileList) == 0:
 			await message.channel.send("🚫 Invalid string")
 		
-		try:
-			await message.delete()
-		except:
-			pass
+		if CONFIG['delete_command_messages']:
+			try:
+				await message.delete()
+			except:
+				pass
 		
 		torStr = []
 		for t in torFileList:
@@ -1282,10 +1292,11 @@ async def summary(message, content="", repeat_msg_key=None):
 		if not repeat_msg_key:
 			if len(REPEAT_MSGS) == 0:
 				reload_client()
-			try:
-				await message.delete()
-			except:
-				pass
+			if CONFIG['delete_command_messages']:
+				try:
+					await message.delete()
+				except:
+					pass
 		
 		if TSCLIENT is None:
 			reload_client()
@@ -1656,10 +1667,11 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 		if not repeat_msg_key:
 			if len(REPEAT_MSGS) == 0:
 				reload_client()
-			try:
-				await message.delete()
-			except:
-				pass
+			if CONFIG['delete_command_messages']:
+				try:
+					await message.delete()
+				except:
+					pass
 		
 		if TSCLIENT is None:
 			reload_client()
@@ -1813,10 +1825,11 @@ async def modify(message, content=""):
 					await message.channel.send("Must specify integer greater than 0 for `-N`!")
 					return
 
-			try:
-				await message.delete()
-			except:
-				pass
+			if CONFIG['delete_command_messages']:
+				try:
+					await message.delete()
+				except:
+					pass
 			
 			if TSCLIENT is None:
 				reload_client()
