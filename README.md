@@ -112,6 +112,7 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 	* Bot will create `config.json`, after which you can remove or comment the definition of `CONFIG` in `bot.py` to make future updates easier
 
 ## To-do (~~implemented~~)
+* Comment and clean up code so people can read/trust it
 * Command to print detailed information for transfer(s)
 	* Complete connection information
 	* Lists of transfer files, peers, trackers
