@@ -50,7 +50,9 @@ CONFIG = {
     "blacklist_user_ids": [], # discord users disallowed to use bot
     "owner_user_ids": [], # discord users given full access
 	 "delete_command_messages": False, # delete command messages from users
+	"delete_command_message_private_torrent": True, # deletes command message if that message contains one or more torrent files that use a private tracker
 	"private_transfers_protected": True, # prevent transfers on private trackers from being removed
+	"private_transfer_protection_added_user_override": True, # if true, the user that added a private transfer can remove it regardless of 'private_transfers_protected'
 	"whitelist_user_can_remove": True, # if true, whitelisted users can remove any transfer
 	"whitelist_user_can_delete": True, # if true, whitelisted users can remove and delete any transfer
 	"whitelist_added_user_remove_delete_override": True, # if true, override both 'whitelist_user_can_remove' and 'whitelist_user_can_delete' allowing whitelisted users to remove and delete transfers they added
@@ -119,6 +121,7 @@ logger.setLevel(logging.INFO) # set according to table below. values LESS than t
 
 """
 Level		Numeric value
+__________________________
 CRITICAL	50
 ERROR		40
 WARNING		30
@@ -662,10 +665,14 @@ def verify_torrents(torrents=[]):
 		logger.info("Verified: {} {}\n\tDry run: {}".format(torrent.name, torrent.hashString, CONFIG['dryrun']))
 
 def add_torrent(torStr):
-	tor = None
-	if torStr != "":
-		tor = TSCLIENT.add_torrent(torStr)
-	return tor
+	torrent = None
+	if not CONFIG['dryrun']:
+		if torStr != "":
+			torrent = TSCLIENT.add_torrent(torStr)
+			logger.info("Added: {} {}\n\tDry run: {}".format(torrent.name, torrent.hashString, CONFIG['dryrun']))
+	else:
+		logger.info("Added: {} \n\tDry run: {}".format(torStr if len(torStr) < 300 else torStr[:200], CONFIG['dryrun']))
+	return torrent
 
 
 # Begin discord bot functions, adapted from https://github.com/kkrypt0nn/Python-Discord-Bot-Template
@@ -813,7 +820,7 @@ def prepare_notifications(changedTransfers, states=CONFIG['notification_states']
 								embeds.append(discord.Embed(title=""))
 								embeds[-1].timestamp = ts
 							if len(nameStr) + len(valStr) + len(v) > 1000:
-								embeds[-1].add_field(name=nStr, value=valStr, inline=False)
+								embeds[-1].add_field(name=nameStr, value=valStr, inline=False)
 								nameStr = ""
 								valStr = ""
 							else:
@@ -956,7 +963,7 @@ async def loop_notifications():
 @client.event
 async def on_ready():
 	global TSCLIENT_CONFIG, CONFIG
-	
+	unlock()
 	TSCLIENT_CONFIG = CONFIG['tsclient']
 	if not CONFIG: # load from config file
 		CONFIG = load_json(path=CONFIG_JSON)
@@ -1116,64 +1123,126 @@ def message_has_torrent_file(message):
 			return True
 	return False
 
+def commaListToParagraphForm(l):
+	outStr = ''
+	if len(l) > 0:
+		outStr += ('' if len(l <= 2) else ', ').join(l[:-1])
+		outStr += ('{} and '.format('' if len(l) <= 2 else ',') if len(l) > 1 else '') + str(l[-1])
+		
+	return outStr
+
 async def add(message, content = ""):
 	if await CommandPrecheck(message):
-		torFileList = []
-		for f in message.attachments:
-			if len(f.filename) > 8 and f.filename[-8:].lower() == ".torrent":
-				encodedBytes = base64.b64encode(await f.read())
-				encodedStr = str(encodedBytes, "utf-8")
-				torFileList.append({"name":f.filename,"content":encodedStr})
-			continue
-		if content == "" and len(torFileList) == 0:
-			await message.channel.send("🚫 Invalid string")
+		async with message.channel.typing():
+			torFileList = []
+			for f in message.attachments:
+				if len(f.filename) > 8 and f.filename[-8:].lower() == ".torrent":
+					encodedBytes = base64.b64encode(await f.read())
+					encodedStr = str(encodedBytes, "utf-8")
+					torFileList.append({"name":f.filename,"content":encodedStr})
+				continue
+			if content == "" and len(torFileList) == 0:
+				await message.channel.send("🚫 Invalid string")
 		
-		if CONFIG['delete_command_messages']:
-			try:
-				await message.delete()
-			except:
-				pass
-		
-		torStr = []
-		for t in torFileList:
-			# await message.channel.send('Adding torrent from file: {}\n Please wait...'.format(t["name"]))
-			try:
-				tor = add_torrent(t["content"])
-				if tor:
-					logger.info("User {} ({}) added torrent from file: {} ({})".format(message.author.name, message.author.id, tor.name, tor.hashString))
-					lock()
-					TORRENT_ADDED_USERS[tor.hashString] = message.author.id
-					unlock()
-					logger.debug("Added to TORRENT_ADDED_USERS")
-			except:
-				await message.channel.send('‼️ Error communicating with Transmission ‼️')
-				return
-			torStr.append("📄 {}".format(tor.name))
-			
-		for t in content.strip().split(" "):
-			if len(t) > 5:
-				# await message.channel.send('Adding torrent from link: {}\n Please wait...'.format(t))
+			if CONFIG['delete_command_messages']:
 				try:
-					tor = add_torrent(t)
+					await message.delete()
+				except:
+					pass
+		
+			torStr = []
+			torIDs = []
+			for i,t in enumerate(torFileList):
+				# await message.channel.send('Adding torrent from file: {}\n Please wait...'.format(t["name"]))
+				try:
+					tor = add_torrent(t["content"])
 					if tor:
-						logger.info("User {} ({}) added torrent from URL: {} ({})".format(message.author.name, message.author.id, tor.name, tor.hashString))
 						lock()
 						TORRENT_ADDED_USERS[tor.hashString] = message.author.id
 						unlock()
+						logger.info("User {} ({}) added torrent from file {}: {} ({})".format(message.author.name, message.author.id, t["name"], tor.name, tor.hashString))
+						# if tor.isPrivate:
+						# 	privateTransfers.append(len(privateTransfers))
 						logger.debug("Added to TORRENT_ADDED_USERS")
-				except:
-					await message.channel.send('‼️ Error communicating with Transmission ‼️')
-					return
-				torStr.append("🧲 {}".format(tor.name))
+						torStr.append("💽 {}".format(tor.name))
+						torIDs.append(tor.id)
+					elif CONFIG['dryrun']:
+						torStr.append("💽 added file dryrun: {}".format(t["name"]))
+				except Exception as e:
+					logger.warning("Exception when adding torrent from file: {}".format(e))
+			
+			for t in content.strip().split(" "):
+				if len(t) > 5:
+					# await message.channel.send('Adding torrent from link: {}\n Please wait...'.format(t))
+					try:
+						tor = add_torrent(t)
+						if tor:
+							lock()
+							TORRENT_ADDED_USERS[tor.hashString] = message.author.id
+							unlock()
+							logger.info("User {} ({}) added torrent from URL: {} ({})".format(message.author.name, message.author.id, tor.name, tor.hashString))
+							# if tor.isPrivate:
+							# 	privateTransfers.append(len(privateTransfers))
+							logger.debug("Added to TORRENT_ADDED_USERS")
+							torStr.append("🧲 {}".format(tor.name))
+							torIDs.append(tor.id)
+					except Exception as e:
+						logger.warning("Exception when adding torrent from URL: {}".format(e))
 				
-		if len(torStr) > 0:
-			await message.channel.send('🟢 Added torrent{}:\n{}'.format("s" if len(torStr) > 1 else "", '\n'.join(torStr)))
-		else:
-			await message.channel.send('🚫 No torrents added!')
+			if len(torStr) > 0:
+				embeds = []
+				if len('\n'.join(torStr)) > 2000:
+					embeds.append(discord.Embed(title='🟢 Added torrents'))
+					descStr = torStr[0]
+					for t in torStr[1:]:
+						if len(descStr) + len(t) < 2000:
+							descStr += '\n{}'.format(t)
+						else:
+							embeds[-1].description = descStr
+							embeds.append(discord.Embed(title='🟢 Added torrents'))
+							descStr = t
+				else:
+					embeds = [discord.Embed(title='🟢 Added torrent{}'.format("s" if len(torStr) > 1 else ""), description='\n'.join(torStr), color=0xb51a00)]
+				privateTransfers = []
+				if not CONFIG['dryrun']:
+					logger.debug("Checking for private transfers amidst the {} new torrents".format(len(torStr)))
+					privateCheckSuccess = False
+					for i in range(5):
+						try:
+							newTorrents = TSCLIENT.get_torrents_by(id_list=torIDs)
+							logger.debug("Fetched {} transfers from transmission corresponding to the {} transfer IDs recorded".format(len(newTorrents),len(torIDs)))
+							for tor in newTorrents:
+								logger.debug("Checking private status of added transfer {}: {}".format(i+1, tor.name))
+								if tor.isPrivate:
+									privateTransfers.append(torIDs.index(tor.id))
+									logger.debug("Transfer is private")
+							privateCheckSuccess = True
+							logger.debug("Successfully checked for private tranfers: {} found".format(len(privateTransfers)))
+							break
+						except AttributeError as e:
+							logger.debug("Attribute error when checking for private status of added torrent(s): {}".format(e))
+						except Exception as e:
+							logger.warning("Exception when checking for private status of added torrent(s): {}".format(e))
+						asyncio.sleep(0.2)
+				if len(privateTransfers) > 0 or CONFIG['dryrun']:
+					if len(privateTransfers) > 0 and CONFIG['delete_command_message_private_torrent']:
+						try:
+							await message.delete()
+						except Exception as e:
+							logger.warning("Exception when removing command message used to add private torrent(s): {}".format(e))
+					embeds[-1].set_footer(text="\n🔐  One or more added torrents are using a private tracker, which may prohibit running the same transfer from multiple locations. Ensure that you're not breaking any private tracker rules.{}".format('' if CONFIG['dryrun'] else "\n(I erased the command message to prevent any unintentional sharing of torrent files)"))
+				for e in embeds:
+					await message.channel.send(embed=e)
+			else:
+				await message.channel.send('🚫 No torrents added!')
+		
 
 @client.command(name='add', aliases=['a'], pass_context=True)
 async def add_cmd(context, *, content = ""):
-	await add(context.message, content=content)
+	try:
+		await add(context.message, content=content)
+	except Exception as e:
+		logger.warning("Exception when adding torrent(s): {}".format(e))
 	
 # def torInfo(t):
 # 	states = ('downloading', 'seeding', 'stopped', 'finished','all')
@@ -1289,109 +1358,110 @@ def torSummary(torrents, repeat_msg_key=None, show_repeat=True):
 async def summary(message, content="", repeat_msg_key=None):
 	global REPEAT_MSGS
 	if await CommandPrecheck(message):
-		if not repeat_msg_key:
-			if len(REPEAT_MSGS) == 0:
+		async with message.channel.typing():
+			if not repeat_msg_key:
+				if len(REPEAT_MSGS) == 0:
+					reload_client()
+				if CONFIG['delete_command_messages']:
+					try:
+						await message.delete()
+					except:
+						pass
+		
+			if TSCLIENT is None:
 				reload_client()
-			if CONFIG['delete_command_messages']:
-				try:
-					await message.delete()
-				except:
-					pass
 		
-		if TSCLIENT is None:
-			reload_client()
+			stateEmojiFilterStartNum = 3 # the first emoji in stateEmoji that corresponds to a list filter
+			ignoreEmoji = ('✅')
 		
-		stateEmojiFilterStartNum = 3 # the first emoji in stateEmoji that corresponds to a list filter
-		ignoreEmoji = ('✅')
+			summaryData=torSummary(TSCLIENT.get_torrents(), repeat_msg_key=repeat_msg_key, show_repeat=message.author.dm_channel is None or message.channel.id != message.author.dm_channel.id)
 		
-		summaryData=torSummary(TSCLIENT.get_torrents(), repeat_msg_key=repeat_msg_key, show_repeat=message.author.dm_channel is None or message.channel.id != message.author.dm_channel.id)
-		
-		if repeat_msg_key:
-			msg = REPEAT_MSGS[repeat_msg_key]['msgs'][0]
-			if REPEAT_MSGS[repeat_msg_key]['reprint'] or (REPEAT_MSGS[repeat_msg_key]['pin_to_bottom'] and message.channel.last_message_id != msg.id):
-				await msg.delete()
-				msg = await message.channel.send(embed=summaryData[0])
-				REPEAT_MSGS[repeat_msg_key]['msgs'] = [msg]
-				REPEAT_MSGS[repeat_msg_key]['reprint'] = False
-			else:
-				await msg.edit(embed=summaryData[0])
+			if repeat_msg_key:
+				msg = REPEAT_MSGS[repeat_msg_key]['msgs'][0]
+				if REPEAT_MSGS[repeat_msg_key]['reprint'] or (REPEAT_MSGS[repeat_msg_key]['pin_to_bottom'] and message.channel.last_message_id != msg.id):
+					await msg.delete()
+					msg = await message.channel.send(embed=summaryData[0])
+					REPEAT_MSGS[repeat_msg_key]['msgs'] = [msg]
+					REPEAT_MSGS[repeat_msg_key]['reprint'] = False
+				else:
+					await msg.edit(embed=summaryData[0])
 			
-			if message.channel.last_message_id != msg.id and (message.author.dm_channel is None or message.channel.id != message.author.dm_channel.id):
-				stateEmoji = ('📜','🖨','❎','↕️') + torStateEmoji
-				stateEmojiFilterStartNum += 1
+				if message.channel.last_message_id != msg.id and (message.author.dm_channel is None or message.channel.id != message.author.dm_channel.id):
+					stateEmoji = ('📜','🖨','❎','↕️') + torStateEmoji
+					stateEmojiFilterStartNum += 1
+				else:
+					stateEmoji = ('📜','↕️') + torStateEmoji
+					stateEmojiFilterStartNum -= 1
 			else:
-				stateEmoji = ('📜','↕️') + torStateEmoji
-				stateEmojiFilterStartNum -= 1
-		else:
-			if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
-				stateEmoji = ('📜','↕️') + torStateEmoji
-				stateEmojiFilterStartNum -= 1
-			else:
-				stateEmoji = ('📜','🔄','↕️') + torStateEmoji
-			msg = await message.channel.send(embed=summaryData[0])
+				if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
+					stateEmoji = ('📜','↕️') + torStateEmoji
+					stateEmojiFilterStartNum -= 1
+				else:
+					stateEmoji = ('📜','🔄','↕️') + torStateEmoji
+				msg = await message.channel.send(embed=summaryData[0])
 		
-		# to get actual list of reactions, need to re-fetch the message from the server
-		cache_msg = await message.channel.fetch_message(msg.id)
-		msgRxns = [str(r.emoji) for r in cache_msg.reactions]
+			# to get actual list of reactions, need to re-fetch the message from the server
+			cache_msg = await message.channel.fetch_message(msg.id)
+			msgRxns = [str(r.emoji) for r in cache_msg.reactions]
 		
-		for i in stateEmoji[:stateEmojiFilterStartNum]:
-			if i not in msgRxns:
-				await msg.add_reaction(i)
-		for i in range(len(summaryData[1])):
-			if summaryData[1][i] > 0 and stateEmoji[i+stateEmojiFilterStartNum] not in ignoreEmoji and stateEmoji[i+stateEmojiFilterStartNum] not in msgRxns:
-				await msg.add_reaction(stateEmoji[i+stateEmojiFilterStartNum])
-			elif summaryData[1][i] == 0 and stateEmoji[i+stateEmojiFilterStartNum] in msgRxns:
-				await message_clear_reactions(msg, message, reactions=[stateEmoji[i+stateEmojiFilterStartNum]])
-			# if not repeat_msg_key:
-			# 	cache_msg = await message.channel.fetch_message(msg.id)
-			# 	for r in cache_msg.reactions:
-			# 		if r.count > 1:
-			# 			async for user in r.users():
-			# 				if user.id in CONFIG['whitelist_user_ids']:
-			# 					if str(r.emoji) == '📜':
-			# 						await message_clear_reactions(msg, message)
-			# 						await legend(context)
-			# 						return
-			# 					elif str(r.emoji) == '🔄':
-			# 						await message_clear_reactions(msg, message, reactions=['🔄'])
-			# 						await repeat_command(summary, message=message, content=content, msg_list=[msg])
-			# 						return
-			# 					elif str(r.emoji) in stateEmoji[stateEmojiFilterStartNum-1:] and user.id == message.author.id:
-			# 						await message_clear_reactions(msg, message)
-			# 						await list_transfers(message, content=torStateFilters[str(r.emoji)])
-			# 						return
+			for i in stateEmoji[:stateEmojiFilterStartNum]:
+				if i not in msgRxns:
+					await msg.add_reaction(i)
+			for i in range(len(summaryData[1])):
+				if summaryData[1][i] > 0 and stateEmoji[i+stateEmojiFilterStartNum] not in ignoreEmoji and stateEmoji[i+stateEmojiFilterStartNum] not in msgRxns:
+					await msg.add_reaction(stateEmoji[i+stateEmojiFilterStartNum])
+				elif summaryData[1][i] == 0 and stateEmoji[i+stateEmojiFilterStartNum] in msgRxns:
+					await message_clear_reactions(msg, message, reactions=[stateEmoji[i+stateEmojiFilterStartNum]])
+				# if not repeat_msg_key:
+				# 	cache_msg = await message.channel.fetch_message(msg.id)
+				# 	for r in cache_msg.reactions:
+				# 		if r.count > 1:
+				# 			async for user in r.users():
+				# 				if user.id in CONFIG['whitelist_user_ids']:
+				# 					if str(r.emoji) == '📜':
+				# 						await message_clear_reactions(msg, message)
+				# 						await legend(context)
+				# 						return
+				# 					elif str(r.emoji) == '🔄':
+				# 						await message_clear_reactions(msg, message, reactions=['🔄'])
+				# 						await repeat_command(summary, message=message, content=content, msg_list=[msg])
+				# 						return
+				# 					elif str(r.emoji) in stateEmoji[stateEmojiFilterStartNum-1:] and user.id == message.author.id:
+				# 						await message_clear_reactions(msg, message)
+				# 						await list_transfers(message, content=torStateFilters[str(r.emoji)])
+				# 						return
 		
-		cache_msg = await message.channel.fetch_message(msg.id)
-		for r in cache_msg.reactions:
-			if r.count > 1:
-				async for user in r.users():
-					if user.id in CONFIG['whitelist_user_ids']:
-						if str(r.emoji) == '📜':
-							if repeat_msg_key:
-								await message_clear_reactions(msg, message, reactions=['📜'])
-							else:
+			cache_msg = await message.channel.fetch_message(msg.id)
+			for r in cache_msg.reactions:
+				if r.count > 1:
+					async for user in r.users():
+						if user.id in CONFIG['whitelist_user_ids']:
+							if str(r.emoji) == '📜':
+								if repeat_msg_key:
+									await message_clear_reactions(msg, message, reactions=['📜'])
+								else:
+									await message_clear_reactions(msg, message)
+								await legend(message)
+								return
+							elif str(r.emoji) == '❎':
 								await message_clear_reactions(msg, message)
-							await legend(message)
-							return
-						elif str(r.emoji) == '❎':
-							await message_clear_reactions(msg, message)
-							REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
-							return
-						elif str(r.emoji) == '🔄':
-							await message_clear_reactions(msg, message, reactions=['🔄'])
-							await repeat_command(summary, message=message, content=content, msg_list=[msg])
-							return
-						elif str(r.emoji) in stateEmoji[stateEmojiFilterStartNum-1:] and user.id == message.author.id:
-							if repeat_msg_key:
-								await message_clear_reactions(msg, message, reactions=[str(r.emoji)])
-								asyncio.create_task(list_transfers(message, content=torStateFilters[str(r.emoji)]))
-							else:
-								await message_clear_reactions(msg, message)
-								await list_transfers(message, content=torStateFilters[str(r.emoji)])
-							return
+								REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
+								return
+							elif str(r.emoji) == '🔄':
+								await message_clear_reactions(msg, message, reactions=['🔄'])
+								await repeat_command(summary, message=message, content=content, msg_list=[msg])
+								return
+							elif str(r.emoji) in stateEmoji[stateEmojiFilterStartNum-1:] and user.id == message.author.id:
+								if repeat_msg_key:
+									await message_clear_reactions(msg, message, reactions=[str(r.emoji)])
+									asyncio.create_task(list_transfers(message, content=torStateFilters[str(r.emoji)]))
+								else:
+									await message_clear_reactions(msg, message)
+									await list_transfers(message, content=torStateFilters[str(r.emoji)])
+								return
 		
-		def check(reaction, user):
-			return user == message.author and reaction.message.id == msg.id and str(reaction.emoji) in stateEmoji
+			def check(reaction, user):
+				return user == message.author and reaction.message.id == msg.id and str(reaction.emoji) in stateEmoji
 		
 		try:
 			reaction, user = await client.wait_for('reaction_add', timeout=60.0 if not repeat_msg_key else REPEAT_MSGS[repeat_msg_key]['freq'], check=check)
@@ -1453,7 +1523,10 @@ async def summary(message, content="", repeat_msg_key=None):
 				
 @client.command(name='summary',aliases=['s'], pass_context=True)
 async def summary_cmd(context, *, content="", repeat_msg_key=None):
-	await summary(context.message, content, repeat_msg_key=repeat_msg_key)
+	try:
+		await summary(context.message, content, repeat_msg_key=repeat_msg_key)
+	except Exception as e:
+		logger.warning("Exception in t/summary: {}".format(e))
 
 def strListToList(strList):
 	if not re.match('^[0-9\,\-]+$', strList):
@@ -1647,91 +1720,92 @@ async def repeat_command(command, message, content="", msg_list=[]):
 async def list_transfers(message, content="", repeat_msg_key=None):
 	global REPEAT_MSGS
 	if await CommandPrecheck(message):
-		id_list = strListToList(content)
-		filter_by = None
-		sort_by = None
-		filter_regex = None
-		num_results = None
-		if not id_list:
-			filter_by, sort_by, filter_regex, num_results = torGetListOpsFromStr(content)
-			if filter_by is not None and filter_by == -1:
-				await message.channel.send("Invalid filter specified. Choose one of {}".format(str(filter_names_full)))
-				return
-			if sort_by is not None and sort_by == -1:
-				await message.channel.send("Invalid sort specified. Choose one of {}".format(str(sort_names)))
-				return
-			if num_results is not None and num_results <= 0:
-				await message.channel.send("Must specify integer greater than 0 for `-N`!")
-				return
+		async with message.channel.typing():
+			id_list = strListToList(content)
+			filter_by = None
+			sort_by = None
+			filter_regex = None
+			num_results = None
+			if not id_list:
+				filter_by, sort_by, filter_regex, num_results = torGetListOpsFromStr(content)
+				if filter_by is not None and filter_by == -1:
+					await message.channel.send("Invalid filter specified. Choose one of {}".format(str(filter_names_full)))
+					return
+				if sort_by is not None and sort_by == -1:
+					await message.channel.send("Invalid sort specified. Choose one of {}".format(str(sort_names)))
+					return
+				if num_results is not None and num_results <= 0:
+					await message.channel.send("Must specify integer greater than 0 for `-N`!")
+					return
 		
-		if not repeat_msg_key:
-			if len(REPEAT_MSGS) == 0:
+			if not repeat_msg_key:
+				if len(REPEAT_MSGS) == 0:
+					reload_client()
+				if CONFIG['delete_command_messages']:
+					try:
+						await message.delete()
+					except:
+						pass
+		
+			if TSCLIENT is None:
 				reload_client()
-			if CONFIG['delete_command_messages']:
-				try:
-					await message.delete()
-				except:
-					pass
 		
-		if TSCLIENT is None:
-			reload_client()
+			torrents = TSCLIENT.get_torrents_by(sort_by=sort_by, filter_by=filter_by, filter_regex=filter_regex, id_list=id_list, num_results=num_results)
 		
-		torrents = TSCLIENT.get_torrents_by(sort_by=sort_by, filter_by=filter_by, filter_regex=filter_regex, id_list=id_list, num_results=num_results)
+			embeds = torList(torrents, title="{} transfer{} matching '`{}`'".format(len(torrents),'' if len(torrents)==1 else 's',content))
 		
-		embeds = torList(torrents, title="{} transfer{} matching '`{}`'".format(len(torrents),'' if len(torrents)==1 else 's',content))
-		
-		if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
-			embeds[-1].set_footer(text="📜 Symbol legend")
-		else:
-			embeds[-1].set_footer(text="📜 Symbol legend{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_MSGS[repeat_msg_key]['freq'],'s' if REPEAT_MSGS[repeat_msg_key]['freq'] != 1 else '') if repeat_msg_key else ', 🔄 to auto-update'))
-			
-		if repeat_msg_key:
-			msgs = REPEAT_MSGS[repeat_msg_key]['msgs']
-			if REPEAT_MSGS[repeat_msg_key]['reprint'] or (REPEAT_MSGS[repeat_msg_key]['pin_to_bottom'] and message.channel.last_message_id != msgs[-1].id):
-				for m in msgs:
-					await m.delete()
-				msgs = []
-				REPEAT_MSGS[repeat_msg_key]['reprint'] = False
-			for i,e in enumerate(embeds):
-				if i < len(msgs):
-					await msgs[i].edit(embed=e)
-					cache_msg = await message.channel.fetch_message(msgs[i].id)
-					if i < len(embeds) - 1 and len(cache_msg.reactions) > 0:
-						await message_clear_reactions(cache_msg, message)
-				else:
-					msgs.append(await message.channel.send(embed=e))
-			if len(msgs) > len(embeds):
-				for i in range(len(msgs) - len(embeds)):
-					await msgs[-1].delete()
-					del msgs[-1]
-			REPEAT_MSGS[repeat_msg_key]['msgs'] = msgs
-			if message.channel.last_message_id != msgs[-1].id:
-				rxnEmoji = ['📜','🖨','❎','🔔','🔕']
-			else:
-				rxnEmoji = ['📜','❎','🔔','🔕']
-		else:
-			msgs = [await message.channel.send(embed=e) for e in embeds]
 			if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
-				rxnEmoji = ['📜','🔔','🔕']
+				embeds[-1].set_footer(text="📜 Symbol legend")
 			else:
-				rxnEmoji = ['📜','🔄','🔔','🔕']
+				embeds[-1].set_footer(text="📜 Symbol legend{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_MSGS[repeat_msg_key]['freq'],'s' if REPEAT_MSGS[repeat_msg_key]['freq'] != 1 else '') if repeat_msg_key else ', 🔄 to auto-update'))
+			
+			if repeat_msg_key:
+				msgs = REPEAT_MSGS[repeat_msg_key]['msgs']
+				if REPEAT_MSGS[repeat_msg_key]['reprint'] or (REPEAT_MSGS[repeat_msg_key]['pin_to_bottom'] and message.channel.last_message_id != msgs[-1].id):
+					for m in msgs:
+						await m.delete()
+					msgs = []
+					REPEAT_MSGS[repeat_msg_key]['reprint'] = False
+				for i,e in enumerate(embeds):
+					if i < len(msgs):
+						await msgs[i].edit(embed=e)
+						cache_msg = await message.channel.fetch_message(msgs[i].id)
+						if i < len(embeds) - 1 and len(cache_msg.reactions) > 0:
+							await message_clear_reactions(cache_msg, message)
+					else:
+						msgs.append(await message.channel.send(embed=e))
+				if len(msgs) > len(embeds):
+					for i in range(len(msgs) - len(embeds)):
+						await msgs[-1].delete()
+						del msgs[-1]
+				REPEAT_MSGS[repeat_msg_key]['msgs'] = msgs
+				if message.channel.last_message_id != msgs[-1].id:
+					rxnEmoji = ['📜','🖨','❎','🔔','🔕']
+				else:
+					rxnEmoji = ['📜','❎','🔔','🔕']
+			else:
+				msgs = [await message.channel.send(embed=e) for e in embeds]
+				if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
+					rxnEmoji = ['📜','🔔','🔕']
+				else:
+					rxnEmoji = ['📜','🔄','🔔','🔕']
 		
-		msg = msgs[-1]
+			msg = msgs[-1]
 		
-		# to get actual list of reactions, need to re-fetch the message from the server
-		cache_msg = await message.channel.fetch_message(msg.id)
-		msgRxns = [str(r.emoji) for r in cache_msg.reactions]
+			# to get actual list of reactions, need to re-fetch the message from the server
+			cache_msg = await message.channel.fetch_message(msg.id)
+			msgRxns = [str(r.emoji) for r in cache_msg.reactions]
 		
-		for e in msgRxns:
-			if e not in rxnEmoji:
-				await message_clear_reactions(msg, message, reactions=[e])
+			for e in msgRxns:
+				if e not in rxnEmoji:
+					await message_clear_reactions(msg, message, reactions=[e])
 		
-		for e in rxnEmoji:
-			if e not in msgRxns:
-				await msg.add_reaction(e)
+			for e in rxnEmoji:
+				if e not in msgRxns:
+					await msg.add_reaction(e)
 		
-		def check(reaction, user):
-			return user.id in CONFIG['whitelist_user_ids'] and reaction.message.id == msg.id and str(reaction.emoji) in rxnEmoji
+			def check(reaction, user):
+				return user.id in CONFIG['whitelist_user_ids'] and reaction.message.id == msg.id and str(reaction.emoji) in rxnEmoji
 		
 		try:
 			reaction, user = await client.wait_for('reaction_add', timeout=60.0 if not repeat_msg_key else REPEAT_MSGS[repeat_msg_key]['freq'], check=check)
@@ -1801,188 +1875,205 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 
 @client.command(name='list', aliases=['l'], pass_context=True)
 async def list_transfers_cmd(context, *, content="", repeat_msg_key=None):
-	await list_transfers(context.message, content=content, repeat_msg_key=repeat_msg_key)
+	try:
+		await list_transfers(context.message, content=content, repeat_msg_key=repeat_msg_key)
+	except Exception as e:
+		logger.warning("Exception in t/list: {}".format(e))
 
 async def modify(message, content=""):
 	if await CommandPrecheck(message):
-		allOnly = content.strip() == ""
-		torrents = []
-		if not allOnly:
-			id_list = strListToList(content)
-			filter_by = None
-			sort_by = None
-			filter_regex = None
-			num_results = None
-			if not id_list:
-				filter_by, sort_by, filter_regex, num_results = torGetListOpsFromStr(content)
-				if filter_by is not None and filter_by == -1:
-					await message.channel.send("Invalid filter specified. Choose one of {}".format(str(filter_names_full)))
-					return
-				if sort_by is not None and sort_by == -1:
-					await message.channel.send("Invalid sort specified. Choose one of {}".format(str(sort_names)))
-					return
-				if num_results is not None and num_results <= 0:
-					await message.channel.send("Must specify integer greater than 0 for `-N`!")
-					return
+		async with message.channel.typing():
+			allOnly = content.strip() == ""
+			torrents = []
+			if not allOnly:
+				id_list = strListToList(content)
+				filter_by = None
+				sort_by = None
+				filter_regex = None
+				num_results = None
+				if not id_list:
+					filter_by, sort_by, filter_regex, num_results = torGetListOpsFromStr(content)
+					if filter_by is not None and filter_by == -1:
+						await message.channel.send("Invalid filter specified. Choose one of {}".format(str(filter_names_full)))
+						return
+					if sort_by is not None and sort_by == -1:
+						await message.channel.send("Invalid sort specified. Choose one of {}".format(str(sort_names)))
+						return
+					if num_results is not None and num_results <= 0:
+						await message.channel.send("Must specify integer greater than 0 for `-N`!")
+						return
 
-			if CONFIG['delete_command_messages']:
+				if CONFIG['delete_command_messages']:
+					try:
+						await message.delete()
+					except:
+						pass
+			
+				if TSCLIENT is None:
+					reload_client()
+			
+				if len(REPEAT_MSGS) == 0:
+					reload_client()
+				torrents = TSCLIENT.get_torrents_by(filter_by=filter_by, sort_by=sort_by, filter_regex=filter_regex, id_list=id_list, num_results=num_results)
+
+				if len(torrents) > 0:
+					ops = ["pause","resume","remove","removedelete","verify"]
+					opNames = ["pause","resume","remove","remove and delete","verify"]
+					opEmoji = ['⏸','▶️','❌','🗑','🔬']
+					opStr = "⏸pause ▶️resume ❌remove 🗑remove  and  delete 🔬verify"
+					embeds = torList(torrents,author_name="Click a reaction to choose modification".format(len(torrents), '' if len(torrents)==1 else 's'),title="{} transfer{} matching '`{}`' will be modified".format(len(torrents), '' if len(torrents)==1 else 's', content))
+				else:
+					embed=discord.Embed(title="Modify transfers",color=0xb51a00)
+					embed.set_author(name="No matching transfers found!", icon_url=CONFIG['logo_url'])
+					embeds = [embed]
+			else:
 				try:
 					await message.delete()
 				except:
 					pass
-			
-			if TSCLIENT is None:
-				reload_client()
-			
-			if len(REPEAT_MSGS) == 0:
-				reload_client()
-			torrents = TSCLIENT.get_torrents_by(filter_by=filter_by, sort_by=sort_by, filter_regex=filter_regex, id_list=id_list, num_results=num_results)
-
-			if len(torrents) > 0:
-				ops = ["pause","resume","remove","removedelete","verify"]
-				opNames = ["pause","resume","remove","remove and delete","verify"]
-				opEmoji = ['⏸','▶️','❌','🗑','🔬']
-				opStr = "⏸pause ▶️resume ❌remove 🗑remove  and  delete 🔬verify"
-				embeds = torList(torrents,author_name="Click a reaction to choose modification".format(len(torrents), '' if len(torrents)==1 else 's'),title="{} transfer{} matching '`{}`' will be modified".format(len(torrents), '' if len(torrents)==1 else 's', content))
-			else:
-				embed=discord.Embed(title="Modify transfers",color=0xb51a00)
-				embed.set_author(name="No matching transfers found!", icon_url=CONFIG['logo_url'])
+				ops = ["pauseall","resumeall"]
+				opNames = ["pause all","resume all"]
+				opEmoji = ['⏸','▶️']
+				opStr = "⏸ pause or ▶️ resume all"
+				embed=discord.Embed(title="React to choose modification",color=0xb51a00)
+				embed.set_author(name="All transfers will be affected!", icon_url=CONFIG['logo_url'])
+				embed.set_footer(text=opStr)
 				embeds = [embed]
-		else:
-			try:
-				await message.delete()
-			except:
-				pass
-			ops = ["pauseall","resumeall"]
-			opNames = ["pause all","resume all"]
-			opEmoji = ['⏸','▶️']
-			opStr = "⏸ pause or ▶️ resume all"
-			embed=discord.Embed(title="React to choose modification",color=0xb51a00)
-			embed.set_author(name="All transfers will be affected!", icon_url=CONFIG['logo_url'])
-			embed.set_footer(text=opStr)
-			embeds = [embed]
-		msgs = [await message.channel.send(embed=e) for e in embeds]
+			msgs = [await message.channel.send(embed=e) for e in embeds]
 		
-		if not allOnly and len(torrents) == 0:
-			return
+			if not allOnly and len(torrents) == 0:
+				return
 		
-		opEmoji.append('📜')
+			opEmoji.append('📜')
 		
-		msg = msgs[-1]
+			msg = msgs[-1]
 		
-		for i in opEmoji:
-			await msgs[-1].add_reaction(i)
+			for i in opEmoji:
+				await msgs[-1].add_reaction(i)
 			
-		cache_msg = await message.channel.fetch_message(msg.id)
-		for reaction in cache_msg.reactions:
-			if reaction.count > 1:
-				async for user in reaction.users():
-					if user.id == message.author.id:
-						if str(reaction.emoji) == opEmoji[-1]:
-							await message_clear_reactions(msg, message)
-							await legend(message)
-						elif str(reaction.emoji) in opEmoji[:-1]:
-							cmds = {i:j for i,j in zip(opEmoji,ops)}
-							cmdNames = {i:j for i,j in zip(opEmoji,opNames)}
-							cmd = cmds[str(reaction.emoji)]
-							cmdName = cmdNames[str(reaction.emoji)]
+			cache_msg = await message.channel.fetch_message(msg.id)
+			for reaction in cache_msg.reactions:
+				if reaction.count > 1:
+					async for user in reaction.users():
+						if user.id == message.author.id:
+							if str(reaction.emoji) == opEmoji[-1]:
+								await message_clear_reactions(msg, message)
+								await legend(message)
+							elif str(reaction.emoji) in opEmoji[:-1]:
+								cmds = {i:j for i,j in zip(opEmoji,ops)}
+								cmdNames = {i:j for i,j in zip(opEmoji,opNames)}
+								cmd = cmds[str(reaction.emoji)]
+								cmdName = cmdNames[str(reaction.emoji)]
 		
-							doContinue = True
-							msg2 = None
-							if "remove" in cmds[str(reaction.emoji)]:
-								footerPrepend = ""
-								if CONFIG['private_transfers_protected']:
-									removeTorrents = [t for t in torrents if not t.isPrivate]
-									if len(removeTorrents) != len(torrents):
-										torrents = removeTorrents
-										footerPrepend = "(I'm not allowed to remove private transfers, but I'll do the public ones)\n"
-								if "delete" in cmds[str(reaction.emoji)] and not CONFIG['whitelist_user_can_delete'] and message.author.id not in CONFIG['owner_user_ids']:
-									# user may not be allowed to perform this operation. Check if they added any transfers, and whether the added_user_override is enabled.
-									if CONFIG['whitelist_added_user_remove_delete_override']:
-										# override is enabled, so reduce the list of torrents to be modified to those added by the user.
-										# first get transfers from TORRENT_JSON
-										oldTorrents = load_json(path=TORRENT_JSON)
-										removeTorrents = [t for t in torrents if (t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id)]
+								doContinue = True
+								msg2 = None
+								if "remove" in cmds[str(reaction.emoji)]:
+									footerPrepend = ""
+									if CONFIG['private_transfers_protected']:
+										removeTorrents = [t for t in torrents if not t.isPrivate]
 										if len(removeTorrents) != len(torrents):
-											if len(removeTorrents) > 0:
-												torrents = removeTorrents
-												footerPrepend = "(You can only remove and delete transfers added by you. Other transfers won't be affected.)\n"
+											if CONFIG['private_transfer_protection_added_user_override']:
+												oldTorrents = load_json(path=TORRENT_JSON)
+												removeTorrents = [t for t in torrents if not t.isPrivate or ((t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id))]
+												if len(removeTorrents) != len(torrents):
+													torrents = removeTorrents
+													footerPrepend = "(I'm not allowed to remove private transfers unless they were added by you, but those you added and the public ones)\n"
 											else:
-												await message.channel.send("🚫 You can only remove and delete transfers added by you. If this isn't right, ask an admin to add you to the bot owner list.")
-												await message_clear_reactions(msg, message)
-												return
-									else:
-										# override not enabled, so user can't perform this operation
-										await message.channel.send("🚫 You're not allowed to remove and delete transfers. If this isn't right, ask an admin to add you to the bot owner list or to enable the override for transfers added by you.")
-										await message_clear_reactions(msg, message)
-										return
-								elif not CONFIG['whitelist_user_can_remove'] and message.author.id not in CONFIG['owner_user_ids']:
-									# user may not be allowed to perform this operation. Check if they added any transfers, and whether the added_user_override is enabled.
-									if CONFIG['whitelist_added_user_remove_delete_override']:
-										# override is enabled, so reduce the list of torrents to be modified to those added by the user.
-										# first get transfers from TORRENT_JSON
-										oldTorrents = load_json(path=TORRENT_JSON)
-										removeTorrents = [t for t in torrents if (t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id)]
-										if len(removeTorrents) != len(torrents):
-											if len(removeTorrents) > 0:
 												torrents = removeTorrents
-												footerPrepend = "(You can only remove transfers added by you. Other transfers won't be affected.)\n"
-											else:
-												await message.channel.send("🚫 You can only remove transfers added by you. If this isn't right, ask an admin to add you to the bot owner list.")
-												await message_clear_reactions(msg, message)
-												return
-									else:
-										# override not enabled, so user can't perform this operation
-										await message.channel.send("🚫 You're not allowed to remove transfers. If this isn't right, ask an admin to add you to the bot owner list or to enable the override for transfers added by you.")
-										await message_clear_reactions(msg, message)
-										return
-								embed=discord.Embed(title="Are you sure you wish to remove{} {} transfer{}?".format(' and DELETE' if 'delete' in cmds[str(reaction.emoji)] else '', len(torrents), '' if len(torrents)==1 else 's'),description="**This action is irreversible!**",color=0xb51a00)
-								embed.set_footer(text=footerPrepend + "React ✅ to continue or ❌ to cancel")
-								msg2 = await message.channel.send(embed=embed)
+												footerPrepend = "(I'm not allowed to remove private transfers, but I'll do the public ones)\n"
+									
+									if "delete" in cmds[str(reaction.emoji)] and not CONFIG['whitelist_user_can_delete'] and message.author.id not in CONFIG['owner_user_ids']:
+										# user may not be allowed to perform this operation. Check if they added any transfers, and whether the added_user_override is enabled.
+										if CONFIG['whitelist_added_user_remove_delete_override']:
+											# override is enabled, so reduce the list of torrents to be modified to those added by the user.
+											# first get transfers from TORRENT_JSON
+											oldTorrents = load_json(path=TORRENT_JSON)
+											removeTorrents = [t for t in torrents if (t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id)]
+											if len(removeTorrents) != len(torrents):
+												if len(removeTorrents) > 0:
+													torrents = removeTorrents
+													footerPrepend = "(You can only remove and delete transfers added by you. Other transfers won't be affected.)\n"
+												else:
+													await message.channel.send("🚫 You can only remove and delete transfers added by you. If this isn't right, ask an admin to add you to the bot owner list.")
+													await message_clear_reactions(msg, message)
+													return
+										else:
+											# override not enabled, so user can't perform this operation
+											await message.channel.send("🚫 You're not allowed to remove and delete transfers. If this isn't right, ask an admin to add you to the bot owner list or to enable the override for transfers added by you.")
+											await message_clear_reactions(msg, message)
+											return
+									elif not CONFIG['whitelist_user_can_remove'] and message.author.id not in CONFIG['owner_user_ids']:
+										# user may not be allowed to perform this operation. Check if they added any transfers, and whether the added_user_override is enabled.
+										if CONFIG['whitelist_added_user_remove_delete_override']:
+											# override is enabled, so reduce the list of torrents to be modified to those added by the user.
+											# first get transfers from TORRENT_JSON
+											oldTorrents = load_json(path=TORRENT_JSON)
+											removeTorrents = [t for t in torrents if (t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id)]
+											if len(removeTorrents) != len(torrents):
+												if len(removeTorrents) > 0:
+													torrents = removeTorrents
+													footerPrepend = "(You can only remove transfers added by you. Other transfers won't be affected.)\n"
+												else:
+													await message.channel.send("🚫 You can only remove transfers added by you. If this isn't right, ask an admin to add you to the bot owner list.")
+													await message_clear_reactions(msg, message)
+													return
+										else:
+											# override not enabled, so user can't perform this operation
+											await message.channel.send("🚫 You're not allowed to remove transfers. If this isn't right, ask an admin to add you to the bot owner list or to enable the override for transfers added by you.")
+											await message_clear_reactions(msg, message)
+											return
+									embed=discord.Embed(title="Are you sure you wish to remove{} {} transfer{}?".format(' and DELETE' if 'delete' in cmds[str(reaction.emoji)] else '', len(torrents), '' if len(torrents)==1 else 's'),description="**This action is irreversible!**",color=0xb51a00)
+									embed.set_footer(text=footerPrepend + "React ✅ to continue or ❌ to cancel")
+									msg2 = await message.channel.send(embed=embed)
 
-								for i in ['✅','❌']:
-									await msg2.add_reaction(i)
+									for i in ['✅','❌']:
+										await msg2.add_reaction(i)
 				
-								def check1(reaction, user):
-									return user == message.author and reaction.message.id == msg2.id and str(reaction.emoji) in ['✅','❌']
-								try:
-									reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check1)
-								except asyncio.TimeoutError:
+									def check1(reaction, user):
+										return user == message.author and reaction.message.id == msg2.id and str(reaction.emoji) in ['✅','❌']
+									try:
+										reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check1)
+									except asyncio.TimeoutError:
+										await message_clear_reactions(msg, message)
+										await message_clear_reactions(msg2, message)
+										doContinue = False
+									else:
+										doContinue = str(reaction.emoji) == '✅'
+								if doContinue:
+									async with message.channel.typing():
+										await message.channel.send("{} Trying to {} transfer{}, please wait...".format(str(reaction.emoji), cmdName, 's' if allOnly or len(torrents) > 1 else ''))
+										try:
+											if "pause" in cmd:
+												stop_torrents(torrents)
+											elif "resume" in cmd:
+												resume_torrents(torrents, start_all=("all" in cmd))
+											elif "verify" in cmd:
+												verify_torrents(torrents)
+											else:
+												remove_torrents(torrents,delete_files="delete" in cmd)
+											
+											ops = ["pause","resume","remove","removedelete","pauseall","resumeall","verify"]
+											opNames = ["paused","resumed","removed","removed and deleted","paused","resumed","queued for verification"]
+											opEmoji = ["⏸","▶️","❌","🗑","⏸","▶️","🔬"]
+											ops = {i:j for i,j in zip(ops,opNames)}
+											opEmoji = {i:j for i,j in zip(ops,opEmoji)}
+											await message.channel.send("{} Transfer{} {}".format(str(reaction.emoji),'s' if allOnly or len(torrents) > 1 else '', ops[cmd]))
+											await message_clear_reactions(msg, message)
+											if msg2 is not None:
+												await message_clear_reactions(msg2, message)
+											return
+										except Exception as e:
+											await message.channel.send("⚠️ A problem occurred trying to modify transfer(s). You may need to try again... Sorry!".format(str(reaction.emoji), cmdName, 's' if allOnly or len(torrents) > 1 else ''))
+											logger.warning("Exception in t/modify running command '{}': {}".format(cmd,e))
+								else:
+									await message.channel.send("❌ Cancelled!")
 									await message_clear_reactions(msg, message)
-									await message_clear_reactions(msg2, message)
-									doContinue = False
-								else:
-									doContinue = str(reaction.emoji) == '✅'
-							if doContinue:
-								await message.channel.send("{} Trying to {} transfer{}, please wait...".format(str(reaction.emoji), cmdName, 's' if allOnly or len(torrents) > 1 else ''))
-								if "pause" in cmd:
-									stop_torrents(torrents)
-								elif "resume" in cmd:
-									resume_torrents(torrents)
-								elif "verify" in cmd:
-									verify_torrents(torrents)
-								else:
-									remove_torrents(torrents,delete_files="delete" in cmd)
-				
-								ops = ["pause","resume","remove","removedelete","pauseall","resumeall","verify"]
-								opNames = ["paused","resumed","removed","removed and deleted","paused","resumed","queued for verification"]
-								opEmoji = ["⏸","▶️","❌","🗑","⏸","▶️","🔬"]
-								ops = {i:j for i,j in zip(ops,opNames)}
-								opEmoji = {i:j for i,j in zip(ops,opEmoji)}
-								await message.channel.send("{} Transfer{} {}".format(str(reaction.emoji),'s' if allOnly or len(torrents) > 1 else '', ops[cmd]))
-								await message_clear_reactions(msg, message)
-								if msg2 is not None:
-									await message_clear_reactions(msg2, message)
-								return
-							else:
-								await message.channel.send("❌ Cancelled!")
-								await message_clear_reactions(msg, message)
-								if msg2 is not None:
-									await message_clear_reactions(msg2, message)
-								return
+									if msg2 is not None:
+										await message_clear_reactions(msg2, message)
+									return
 	
-		def check(reaction, user):
-			return user == message.author and reaction.message.id == msg.id and str(reaction.emoji) in opEmoji
+			def check(reaction, user):
+				return user == message.author and reaction.message.id == msg.id and str(reaction.emoji) in opEmoji
 	
 		try:
 			reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check)
@@ -2005,9 +2096,18 @@ async def modify(message, content=""):
 					footerPrepend = ""
 					if CONFIG['private_transfers_protected']:
 						removeTorrents = [t for t in torrents if not t.isPrivate]
-						if len(removeTorrents) != len(torrents):
-							torrents = removeTorrents
-							footerPrepend = "(I'm not allowed to remove private transfers, but I'll do the public ones)\n"
+						if CONFIG['private_transfers_protected']:
+							removeTorrents = [t for t in torrents if not t.isPrivate]
+							if len(removeTorrents) != len(torrents):
+								if CONFIG['private_transfer_protection_added_user_override']:
+									oldTorrents = load_json(path=TORRENT_JSON)
+									removeTorrents = [t for t in torrents if not t.isPrivate or ((t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id))]
+									if len(removeTorrents) != len(torrents):
+										torrents = removeTorrents
+										footerPrepend = "(I'm not allowed to remove private transfers unless they were added by you, but those you added and the public ones)\n"
+								else:
+									torrents = removeTorrents
+									footerPrepend = "(I'm not allowed to remove private transfers, but I'll do the public ones)\n"
 					if "delete" in cmds[str(reaction.emoji)] and not CONFIG['whitelist_user_can_delete'] and message.author.id not in CONFIG['owner_user_ids']:
 						# user may not be allowed to perform this operation. Check if they added any transfers, and whether the added_user_override is enabled.
 						if CONFIG['whitelist_added_user_remove_delete_override']:
@@ -2066,28 +2166,31 @@ async def modify(message, content=""):
 					else:
 						doContinue = str(reaction.emoji) == '✅'
 				if doContinue:
-					await message.channel.send("{} Trying to {} transfer{}, please wait...".format(str(reaction.emoji), cmdName, 's' if allOnly or len(torrents) > 1 else ''))
-					if "pause" in cmd:
-						stop_torrents(torrents)
-					elif "resume" in cmd:
-						resume_torrents(torrents)
-					elif "verify" in cmd:
-						verify_torrents(torrents)
-					else:
-						remove_torrents(torrents,delete_files="delete" in cmd)
-					
-					
-					
-					ops = ["pause","resume","remove","removedelete","pauseall","resumeall","verify"]
-					opNames = ["paused","resumed","removed","removed and deleted","paused","resumed","queued for verification"]
-					opEmoji = ["⏸","▶️","❌","🗑","⏸","▶️","🔬"]
-					ops = {i:j for i,j in zip(ops,opNames)}
-					opEmoji = {i:j for i,j in zip(ops,opEmoji)}
-					await message.channel.send("{} Transfer{} {}".format(str(reaction.emoji),'s' if allOnly or len(torrents) > 1 else '', ops[cmd]))
-					await message_clear_reactions(msg, message)
-					if msg2 is not None:
-						await message_clear_reactions(msg2, message)
-					return
+					async with message.channel.typing():
+						await message.channel.send("{} Trying to {} transfer{}, please wait...".format(str(reaction.emoji), cmdName, 's' if allOnly or len(torrents) > 1 else ''))
+						try:
+							if "pause" in cmd:
+								stop_torrents(torrents)
+							elif "resume" in cmd:
+								resume_torrents(torrents, start_all=("all" in cmd))
+							elif "verify" in cmd:
+								verify_torrents(torrents)
+							else:
+								remove_torrents(torrents,delete_files="delete" in cmd)
+							
+							ops = ["pause","resume","remove","removedelete","pauseall","resumeall","verify"]
+							opNames = ["paused","resumed","removed","removed and deleted","paused","resumed","queued for verification"]
+							opEmoji = ["⏸","▶️","❌","🗑","⏸","▶️","🔬"]
+							ops = {i:j for i,j in zip(ops,opNames)}
+							opEmoji = {i:j for i,j in zip(ops,opEmoji)}
+							await message.channel.send("{} Transfer{} {}".format(str(reaction.emoji),'s' if allOnly or len(torrents) > 1 else '', ops[cmd]))
+							await message_clear_reactions(msg, message)
+							if msg2 is not None:
+								await message_clear_reactions(msg2, message)
+							return
+						except Exception as e:
+							await message.channel.send("⚠️ A problem occurred trying to modify transfer(s). You may need to try again... Sorry!".format(str(reaction.emoji), cmdName, 's' if allOnly or len(torrents) > 1 else ''))
+							logger.warning("Exception in t/modify running command '{}': {}".format(cmd,e))
 				else:
 					await message.channel.send("❌ Cancelled!")
 					await message_clear_reactions(msg, message)
@@ -2099,7 +2202,11 @@ async def modify(message, content=""):
 
 @client.command(name='modify', aliases=['m'], pass_context=True)
 async def modify_cmd(context, *, content=""):
-	await modify(context.message, content=content)
+	try:
+		await modify(context.message, content=content)
+	except Exception as e:
+		logger.warning("Exception in t/modify: {}".format(e))
+		
 
 async def toggle_compact_out(message):
 	global OUTPUT_MODE
@@ -2189,6 +2296,18 @@ async def toggle_notifications(message):
 @client.command(name='notifications', aliases=['n'], pass_context=True)
 async def toggle_notifications_cmd(context):
 	await toggle_notifications(context.message)
+	
+async def toggle_dryrun(message):
+	global CONFIG
+	CONFIG['dryrun'] = not CONFIG['dryrun']
+	await message.channel.send("Toggled dryrun to {}".format(CONFIG['dryrun']))
+		
+	return
+
+@client.command(name='dryrun', pass_context=True)
+async def toggle_dryrun_cmd(context):
+	if CommandPrecheck(context.message, whitelist=CONFIG['owner_user_ids']):
+		await toggle_dryrun(context.message)
 
 @client.event
 async def on_message(message):
