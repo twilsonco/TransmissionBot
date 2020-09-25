@@ -50,6 +50,10 @@ This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Pyt
 ### <a name="channelDM">Interact via text channels or DMs</a>
 * Use commands with `t/` prefix in text channel or via DM
 * Via DM only, use full command name without prefix (*e.g.* `summary`)
+* *Why use DMs vs in-channel?*
+	* Use DMs for user privacy or to keep the in-channel usage clean
+	* Use in-channel when privacy isn't an issue, or if you wish to take advantage of auto-updating output
+	* *Note: you can configure the bot to only respond to DMs or in-channel commands, so it can be a fully DM-based method of controlling Transmission if you wish*
 
 ### <a name="add">Add transfers</a>
 * Simply drag a `.torrent` file into the channel on discord and it will be added and started
