@@ -1225,12 +1225,15 @@ async def add(message, content = ""):
 							logger.warning("Exception when checking for private status of added torrent(s): {}".format(e))
 						asyncio.sleep(0.2)
 				if len(privateTransfers) > 0 or CONFIG['dryrun']:
+					footerStr = "🔐 One or more added torrents are using a private tracker, which may prohibit running the same transfer from multiple locations. Ensure that you're not breaking any private tracker rules."
 					if len(privateTransfers) > 0 and CONFIG['delete_command_message_private_torrent']:
-						try:
-							await message.delete()
-						except Exception as e:
-							logger.warning("Exception when removing command message used to add private torrent(s): {}".format(e))
-					embeds[-1].set_footer(text="\n🔐  One or more added torrents are using a private tracker, which may prohibit running the same transfer from multiple locations. Ensure that you're not breaking any private tracker rules.{}".format('' if CONFIG['dryrun'] else "\n(I erased the command message to prevent any unintentional sharing of torrent files)"))
+						if message.author.dm_channel is None or message.channel.id != message.author.dm_channel.id:
+							try:
+								await message.delete()
+								footerStr += "\n(I erased the command message to prevent any unintentional sharing of torrent files)"
+							except Exception as e:
+								logger.warning("Exception when removing command message used to add private torrent(s): {}".format(e))
+					embeds[-1].set_footer(text=footerStr)
 				for e in embeds:
 					await message.channel.send(embed=e)
 			else:
@@ -1758,36 +1761,36 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 			else:
 				embeds[-1].set_footer(text="📜 Symbol legend{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_MSGS[repeat_msg_key]['freq'],'s' if REPEAT_MSGS[repeat_msg_key]['freq'] != 1 else '') if repeat_msg_key else ', 🔄 to auto-update'))
 			
-		if repeat_msg_key:
-			msgs = REPEAT_MSGS[repeat_msg_key]['msgs']
-			if REPEAT_MSGS[repeat_msg_key]['reprint'] or (REPEAT_MSGS[repeat_msg_key]['pin_to_bottom'] and message.channel.last_message_id != msgs[-1].id):
-				for m in msgs:
-					await m.delete()
-				msgs = []
-				REPEAT_MSGS[repeat_msg_key]['reprint'] = False
-			for i,e in enumerate(embeds):
-				if i < len(msgs):
-					await msgs[i].edit(embed=e)
-					cache_msg = await message.channel.fetch_message(msgs[i].id)
-					if i < len(embeds) - 1 and len(cache_msg.reactions) > 0:
-						await message_clear_reactions(cache_msg, message)
+			if repeat_msg_key:
+				msgs = REPEAT_MSGS[repeat_msg_key]['msgs']
+				if REPEAT_MSGS[repeat_msg_key]['reprint'] or (REPEAT_MSGS[repeat_msg_key]['pin_to_bottom'] and message.channel.last_message_id != msgs[-1].id):
+					for m in msgs:
+						await m.delete()
+					msgs = []
+					REPEAT_MSGS[repeat_msg_key]['reprint'] = False
+				for i,e in enumerate(embeds):
+					if i < len(msgs):
+						await msgs[i].edit(embed=e)
+						cache_msg = await message.channel.fetch_message(msgs[i].id)
+						if i < len(embeds) - 1 and len(cache_msg.reactions) > 0:
+							await message_clear_reactions(cache_msg, message)
+					else:
+						msgs.append(await message.channel.send(embed=e))
+				if len(msgs) > len(embeds):
+					for i in range(len(msgs) - len(embeds)):
+						await msgs[-1].delete()
+						del msgs[-1]
+				REPEAT_MSGS[repeat_msg_key]['msgs'] = msgs
+				if message.channel.last_message_id != msgs[-1].id:
+					rxnEmoji = ['📜','🖨','❎','🔔','🔕']
 				else:
-					msgs.append(await message.channel.send(embed=e))
-			if len(msgs) > len(embeds):
-				for i in range(len(msgs) - len(embeds)):
-					await msgs[-1].delete()
-					del msgs[-1]
-			REPEAT_MSGS[repeat_msg_key]['msgs'] = msgs
-			if message.channel.last_message_id != msgs[-1].id:
-				rxnEmoji = ['📜','🖨','❎','🔔','🔕']
+					rxnEmoji = ['📜','❎','🔔','🔕']
 			else:
-				rxnEmoji = ['📜','❎','🔔','🔕']
-		else:
-			msgs = [await message.channel.send(embed=e) for e in embeds]
-			if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
-				rxnEmoji = ['📜','🔔','🔕']
-			else:
-				rxnEmoji = ['📜','🔄','🔔','🔕']
+				msgs = [await message.channel.send(embed=e) for e in embeds]
+				if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
+					rxnEmoji = ['📜','🔔','🔕']
+				else:
+					rxnEmoji = ['📜','🔄','🔔','🔕']
 	
 		msg = msgs[-1]
 		
@@ -1938,7 +1941,7 @@ async def modify(message, content=""):
 				embed.set_author(name="All transfers will be affected!", icon_url=CONFIG['logo_url'])
 				embed.set_footer(text=opStr)
 				embeds = [embed]
-		msgs = [await message.channel.send(embed=e) for e in embeds]
+			msgs = [await message.channel.send(embed=e) for e in embeds]
 	
 		if not allOnly and len(torrents) == 0:
 			return
