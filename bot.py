@@ -41,70 +41,70 @@ Bot configuration:
 """
 CONFIG = {
     "tsclient": { # information for transmission remote web gui
-		'host': "192.168.0.2",
-		'port': 9091,
-		'user': "USERNAME",
-		'password': "PASSWORD"
-	},
+        'host': "192.168.0.2",
+        'port': 9091,
+        'user': "USERNAME",
+        'password': "PASSWORD"
+    },
     "whitelist_user_ids": [], # discord users allowed to use bot
     "blacklist_user_ids": [], # discord users disallowed to use bot
     "owner_user_ids": [], # discord users given full access
-	 "delete_command_messages": False, # delete command messages from users
-	"delete_command_message_private_torrent": True, # deletes command message if that message contains one or more torrent files that use a private tracker
-	"private_transfers_protected": True, # prevent transfers on private trackers from being removed
-	"private_transfer_protection_added_user_override": True, # if true, the user that added a private transfer can remove it regardless of 'private_transfers_protected'
-	"whitelist_user_can_remove": True, # if true, whitelisted users can remove any transfer
-	"whitelist_user_can_delete": True, # if true, whitelisted users can remove and delete any transfer
-	"whitelist_added_user_remove_delete_override": True, # if true, override both 'whitelist_user_can_remove' and 'whitelist_user_can_delete' allowing whitelisted users to remove and delete transfers they added
+     "delete_command_messages": False, # delete command messages from users
+    "delete_command_message_private_torrent": True, # deletes command message if that message contains one or more torrent files that use a private tracker
+    "private_transfers_protected": True, # prevent transfers on private trackers from being removed
+    "private_transfer_protection_added_user_override": True, # if true, the user that added a private transfer can remove it regardless of 'private_transfers_protected'
+    "whitelist_user_can_remove": True, # if true, whitelisted users can remove any transfer
+    "whitelist_user_can_delete": True, # if true, whitelisted users can remove and delete any transfer
+    "whitelist_added_user_remove_delete_override": True, # if true, override both 'whitelist_user_can_remove' and 'whitelist_user_can_delete' allowing whitelisted users to remove and delete transfers they added
     "bot_prefix": "t/", # bot command prefix
     "bot_token": "BOT_TOKEN", # bot token
     "dryrun": False, # if true, no changes are actually applied to transfers
     "listen_channel_ids": [], # channels in which to listen for commands
-	"listen_all_channels": False, # if true, listen for commands in all text channels
-	"listen_DMs": True, # listen for commands via DM to the bot
+    "listen_all_channels": False, # if true, listen for commands in all text channels
+    "listen_DMs": True, # listen for commands via DM to the bot
     "logo_url": "https://iyanovich.files.wordpress.com/2009/04/transmission-logo.png", # URL to logo that appears in some output
     "notification_channel_id": 'NOTIFICATION_CHANNEL_ID', # channel to which in-channel notificatations will be posted
     "notification_enabled": True, # if False, in-channel and DM notifications are disabled
-	"notification_enabled_in_channel": True, # if False, in-channel notifications are disabled, but DM notifications will still work
+    "notification_enabled_in_channel": True, # if False, in-channel notifications are disabled, but DM notifications will still work
     "notification_freq": 300, # number of seconds between checking transfers and posting notifications
-	"notification_reaction_check_factor": 2, # determines how long DM notification subscription reactions will be monitored on in-channel and DM notifications; they're monitored for (notification_reaction_check_factor X notification_freq) seconds
-	"notification_DM_opt_out_user_ids": [], # DON'T MODIFY (used by bot to record users that have opted out of receiving DM notifications)
-	"notification_states":{ # determines the types of transfer state changes that are reported in notifications...
-		"in_channel": # ...for in-channel notifications, (this is the full list of potential state changes)
-		[
-			"new",
-			"removed",
-			"error",
-			"downloaded",
-			"stalled",
-			"unstalled",
-			"finished",
-			"stopped",
-			"started"
-		],
-		"notified_users": # ...DM notifications for users that opted in to DM notifications for transfer(s)
-		[
-			"removed",
-			"error",
-			"downloaded",
-			"stalled",
-			"unstalled",
-			"finished",
-			"stopped",
-			"started"
-		],
-		"added_user":# ...and DM notifications to users that added transfers
-		[
-			"removed",
-			"error",
-			"downloaded",
-			"stalled",
-			"unstalled",
-			"finished",
-			"stopped",
-			"started"
-		]
-	},
+    "notification_reaction_check_factor": 2, # determines how long DM notification subscription reactions will be monitored on in-channel and DM notifications; they're monitored for (notification_reaction_check_factor X notification_freq) seconds
+    "notification_DM_opt_out_user_ids": [], # DON'T MODIFY (used by bot to record users that have opted out of receiving DM notifications)
+    "notification_states":{ # determines the types of transfer state changes that are reported in notifications...
+        "in_channel": # ...for in-channel notifications, (this is the full list of potential state changes)
+        [
+            "new",
+            "removed",
+            "error",
+            "downloaded",
+            "stalled",
+            "unstalled",
+            "finished",
+            "stopped",
+            "started"
+        ],
+        "notified_users": # ...DM notifications for users that opted in to DM notifications for transfer(s)
+        [
+            "removed",
+            "error",
+            "downloaded",
+            "stalled",
+            "unstalled",
+            "finished",
+            "stopped",
+            "started"
+        ],
+        "added_user":# ...and DM notifications to users that added transfers
+        [
+            "removed",
+            "error",
+            "downloaded",
+            "stalled",
+            "unstalled",
+            "finished",
+            "stopped",
+            "started"
+        ]
+    },
     "repeat_cancel_verbose": True, # if true, print message when auto-update is canceled for a message
     "repeat_freq": 2, # number of seconds between updating an auto-update message
     "repeat_timeout": 3600, # number of seconds before an auto-update message times out
@@ -642,7 +642,7 @@ def resume_torrents(torrents=[], reason=DEFAULT_REASON, start_all=False):
 	if start_all:
 		if not CONFIG['dryrun']:
 			TSCLIENT.start_all()
-		logger.info("Resumed: all transfers\n\tReason: {}\n\tDry run: {}".format(torrent.name, torrent.hashString, reason, CONFIG['dryrun']))
+		logger.info("Resumed: all transfers\n\tReason: {}\n\tDry run: {}".format(reason, CONFIG['dryrun']))
 	else:
 		for torrent in (torrents if len(torrents) > 0 else TSCLIENT.get_torrents()):
 			if torrent.status == "stopped":
@@ -1331,9 +1331,9 @@ def torSummary(torrents, repeat_msg_key=None, show_repeat=True):
 	totDown = humanbytes(sumDown)
 	totUp = humanbytes(sumUp)
 	
-	totRatio = '{:.2f}'.format(sumUp / sumDown)
+	totRatio = '{:.2f}'.format((sumUp / sumDown) if sumDown > 0 else 0)
 	
-	totDownRatio = '{:.2f}'.format(sumDown / sumTot * 100.0)
+	totDownRatio = '{:.2f}'.format((sumDown / sumTot * 100.0) if sumTot > 0 else 0)
 	
 	numTopRatios = min([len(torrents),CONFIG['summary_num_top_ratio']])
 	topRatios = "• Top {} ratio{}:".format(numTopRatios,"s" if numTopRatios != 1 else "")
@@ -1945,10 +1945,6 @@ async def modify(message, content=""):
 					embed.set_author(name="No matching transfers found!", icon_url=CONFIG['logo_url'])
 					embeds = [embed]
 			else:
-				try:
-					await message.delete()
-				except:
-					pass
 				ops = ["pauseall","resumeall"]
 				opNames = ["pause all","resume all"]
 				opEmoji = ['⏸','▶️']
