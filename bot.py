@@ -332,7 +332,7 @@ class TSClient(transmissionrpc.Client):
 	helper functionality.
 	"""
 
-	def get_torrents_by(self, sort_by=None, filter_by=None, reverse=False, filter_regex=None, id_list=None, num_results=None):
+	def get_torrents_by(self, sort_by=None, filter_by=None, reverse=False, filter_regex=None, tracker_regex=None, id_list=None, num_results=None):
 		"""This method will call get_torrents and then perform any sorting or filtering
 		actions requested on the returned torrent set.
 
@@ -351,6 +351,9 @@ class TSClient(transmissionrpc.Client):
 			if filter_regex:
 				regex = re.compile(filter_regex, re.IGNORECASE)
 				torrents = [tor for tor in torrents if regex.search(tor.name)]
+			if tracker_regex:
+				regex = re.compile(tracker_regex, re.IGNORECASE)
+				torrents = [tor for tor in torrents if regex.search(str([t['announce'] for t in tor.trackers]))]
 			if filter_by:
 				for f in filter_by.split():
 					if f == "active":
@@ -1360,6 +1363,7 @@ def torSummary(torrents, repeat_msg_key=None, show_repeat=True):
 
 async def summary(message, content="", repeat_msg_key=None):
 	global REPEAT_MSGS
+	content=content.strip()
 	if await CommandPrecheck(message):
 		async with message.channel.typing():
 			if not repeat_msg_key:
@@ -1370,14 +1374,20 @@ async def summary(message, content="", repeat_msg_key=None):
 						await message.delete()
 					except:
 						pass
-		
-			if TSCLIENT is None:
-				reload_client()
-		
+						
+			torrents, errStr = get_torrent_list_from_command_str(content)
+			
+			if errStr != "":
+				await message.channel.send(errStr)
+				return
+				
+			summaryData=torSummary(torrents, repeat_msg_key=repeat_msg_key, show_repeat=message.author.dm_channel is None or message.channel.id != message.author.dm_channel.id)
+			
+			if content != "":
+				summaryData[0].description = "Summary of transfers matching '`{}`'\n".format(content) + summaryData[0].description
+			
 			stateEmojiFilterStartNum = 3 # the first emoji in stateEmoji that corresponds to a list filter
 			ignoreEmoji = ('✅')
-		
-			summaryData=torSummary(TSCLIENT.get_torrents(), repeat_msg_key=repeat_msg_key, show_repeat=message.author.dm_channel is None or message.channel.id != message.author.dm_channel.id)
 		
 		if repeat_msg_key:
 			msg = REPEAT_MSGS[repeat_msg_key]['msgs'][0]
@@ -1456,10 +1466,10 @@ async def summary(message, content="", repeat_msg_key=None):
 						elif str(r.emoji) in stateEmoji[stateEmojiFilterStartNum-1:] and user.id == message.author.id:
 							if repeat_msg_key:
 								await message_clear_reactions(msg, message, reactions=[str(r.emoji)])
-								asyncio.create_task(list_transfers(message, content=torStateFilters[str(r.emoji)]))
+								asyncio.create_task(list_transfers(message, content=torStateFilters[str(r.emoji)]+" "+content))
 							else:
 								await message_clear_reactions(msg, message)
-								await list_transfers(message, content=torStateFilters[str(r.emoji)])
+								await list_transfers(message, content=torStateFilters[str(r.emoji)]+" "+content)
 							return
 		
 			def check(reaction, user):
@@ -1476,10 +1486,10 @@ async def summary(message, content="", repeat_msg_key=None):
 			if str(reaction.emoji) in stateEmoji[stateEmojiFilterStartNum-1:] and str(reaction.emoji) not in ignoreEmoji:
 				if repeat_msg_key:
 					await message_clear_reactions(msg, message, reactions=[str(reaction.emoji)])
-					asyncio.create_task(list_transfers(message, content=torStateFilters[str(reaction.emoji)]))
+					asyncio.create_task(list_transfers(message, content=torStateFilters[str(reaction.emoji)]+" "+content))
 				else:
 					await message_clear_reactions(msg, message)
-					await list_transfers(message, content=torStateFilters[str(reaction.emoji)])
+					await list_transfers(message, content=torStateFilters[str(reaction.emoji)]+" "+content)
 				return
 			elif str(reaction.emoji) == '📜':
 				if repeat_msg_key:
@@ -1520,7 +1530,7 @@ async def summary(message, content="", repeat_msg_key=None):
 								return
 							elif str(r.emoji) in stateEmoji[stateEmojiFilterStartNum-1:]:
 								await message_clear_reactions(msg, message, reactions=[str(r.emoji)])
-								await list_transfers(message, content=torStateFilters[str(r.emoji)])
+								asyncio.create_task(list_transfers(message, content=torStateFilters[str(reaction.emoji)]+" "+content))
 								return
 				
 @client.command(name='summary',aliases=['s'], pass_context=True)
@@ -1577,13 +1587,13 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 			down = humanbytes(t.progress * 0.01 * t.totalSize)
 			out = "{} {} {} {} ".format(stateEmoji[t.status],errorStrs[t.error],'🚀' if t.rateDownload + t.rateUpload > 0 else '🐢' if t.isStalled else '🐇', '🔐' if t.isPrivate else '🔓')
 			if t.status == 'downloading':
-				out += "{:.1f}% of {} ⏬ {} {}/s ⬇️ *{}/s* ⬆️ *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), '' if eta <= 0 else '\n⏳ {} @ '.format(humanseconds(eta)), humanbytes(t.rateDownload), humanbytes(t.rateUpload), t.uploadRatio)
+				out += "{:.1f}% of {} ⏬, {} {}/s ⬇️, *{}/s* ⬆️, *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), '' if eta <= 0 else '\n⏳ {} @ '.format(humanseconds(eta)), humanbytes(t.rateDownload), humanbytes(t.rateUpload), t.uploadRatio)
 			elif t.status == 'seeding':
-				out += "{} ⏬ *{}/s* ⬆️ *{:.2f}* ⚖️".format(humanbytes(t.totalSize, d=1), humanbytes(t.rateUpload), t.uploadRatio)
+				out += "{} ⏬, *{}/s* ⬆️, *{:.2f}* ⚖️".format(humanbytes(t.totalSize, d=1), humanbytes(t.rateUpload), t.uploadRatio)
 			elif t.status == 'stopped':
-				out += "{:.1f}% of {} ⏬ *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), t.uploadRatio)
+				out += "{:.1f}% of {} ⏬, *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), t.uploadRatio)
 			elif t.status == 'finished':
-				out += "{} ⏬ {:.2f} ⚖️".format(humanbytes(t.totalSize, d=1), t.uploadRatio)
+				out += "{} ⏬, {:.2f} ⚖️".format(humanbytes(t.totalSize, d=1), t.uploadRatio)
 			elif t.status == "checking":
 				out += "{:.2f}%".format(t.recheckProgress*100.0)
 		
@@ -1628,6 +1638,7 @@ def torGetListOpsFromStr(listOpStr):
 	filter_by = None
 	sort_by = None
 	num_results = None
+	tracker_regex = None
 	splitcontent = listOpStr.split(" ")
 	
 	if "--filter" in splitcontent:
@@ -1655,6 +1666,19 @@ def torGetListOpsFromStr(listOpStr):
 			sort_by = splitcontent[ind+1]
 			del splitcontent[ind+1]
 		del splitcontent[ind]
+	
+	if "--tracker" in splitcontent:
+		ind = splitcontent.index("--tracker")
+		if len(splitcontent) > ind + 1:
+			tracker_regex = splitcontent[ind+1]
+			del splitcontent[ind+1]
+		del splitcontent[ind]
+	elif "-t" in splitcontent:
+		ind = splitcontent.index("-t")
+		if len(splitcontent) > ind + 1:
+			tracker_regex = splitcontent[ind+1]
+			del splitcontent[ind+1]
+		del splitcontent[ind]
 		
 	if "-N" in splitcontent:
 		ind = splitcontent.index("-N")
@@ -1671,13 +1695,13 @@ def torGetListOpsFromStr(listOpStr):
 		filter_regex = None
 	
 	if filter_by is not None and filter_by not in filter_names_full:
-		return -1, None, None, None
+		return -1, None, None, None, None
 	if sort_by is not None and sort_by not in sort_names:
-		return None, -1, None, None
+		return None, -1, None, None, None
 	if num_results is not None and num_results <= 0:
-		return None, None, None, -1
+		return None, None, None, None, -1
 		
-	return filter_by, sort_by, filter_regex, num_results
+	return filter_by, sort_by, filter_regex, tracker_regex, num_results
 
 async def repeat_command(command, message, content="", msg_list=[]):
 	global REPEAT_MSGS
@@ -1719,26 +1743,29 @@ async def repeat_command(command, message, content="", msg_list=[]):
 	del REPEAT_MSGS[msg_key]
 	return
 
+def get_torrent_list_from_command_str(command_str=""):
+	id_list = strListToList(command_str)
+	if not id_list:
+		filter_by, sort_by, filter_regex, tracker_regex, num_results = torGetListOpsFromStr(command_str)
+		if filter_by is not None and filter_by == -1:
+			return [], "Invalid filter specified. Choose one of {}".format(str(filter_names_full))
+		if sort_by is not None and sort_by == -1:
+			return [], "Invalid sort specified. Choose one of {}".format(str(sort_names))
+		if num_results is not None and num_results <= 0:
+			return [], "Must specify integer greater than 0 for `-N`!"
+
+	if TSCLIENT is None:
+		reload_client()
+
+	torrents = TSCLIENT.get_torrents_by(sort_by=sort_by, filter_by=filter_by, filter_regex=filter_regex, tracker_regex=tracker_regex, id_list=id_list, num_results=num_results)
+	
+	return torrents, ""
+
 async def list_transfers(message, content="", repeat_msg_key=None):
 	global REPEAT_MSGS
+	content=content.strip()
 	if await CommandPrecheck(message):
 		async with message.channel.typing():
-			id_list = strListToList(content)
-			filter_by = None
-			sort_by = None
-			filter_regex = None
-			num_results = None
-			if not id_list:
-				filter_by, sort_by, filter_regex, num_results = torGetListOpsFromStr(content)
-				if filter_by is not None and filter_by == -1:
-					await message.channel.send("Invalid filter specified. Choose one of {}".format(str(filter_names_full)))
-					return
-				if sort_by is not None and sort_by == -1:
-					await message.channel.send("Invalid sort specified. Choose one of {}".format(str(sort_names)))
-					return
-				if num_results is not None and num_results <= 0:
-					await message.channel.send("Must specify integer greater than 0 for `-N`!")
-					return
 		
 			if not repeat_msg_key:
 				if len(REPEAT_MSGS) == 0:
@@ -1749,17 +1776,18 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 					except:
 						pass
 		
-			if TSCLIENT is None:
-				reload_client()
-		
-			torrents = TSCLIENT.get_torrents_by(sort_by=sort_by, filter_by=filter_by, filter_regex=filter_regex, id_list=id_list, num_results=num_results)
-		
+			torrents, errStr = get_torrent_list_from_command_str(content)
+			
+			if errStr != "":
+				await message.channel.send(errStr)
+				return
+				
 			embeds = torList(torrents, title="{} transfer{} matching '`{}`'".format(len(torrents),'' if len(torrents)==1 else 's',content))
 		
 			if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
-				embeds[-1].set_footer(text="📜 Symbol legend")
+				embeds[-1].set_footer(text="📜 Symbol legend, 🧾 Summarize")
 			else:
-				embeds[-1].set_footer(text="📜 Symbol legend{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_MSGS[repeat_msg_key]['freq'],'s' if REPEAT_MSGS[repeat_msg_key]['freq'] != 1 else '') if repeat_msg_key else ', 🔄 to auto-update'))
+				embeds[-1].set_footer(text="📜 Symbol legend, 🧾 Summarize{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_MSGS[repeat_msg_key]['freq'],'s' if REPEAT_MSGS[repeat_msg_key]['freq'] != 1 else '') if repeat_msg_key else ', 🔄 to auto-update'))
 			
 			if repeat_msg_key:
 				msgs = REPEAT_MSGS[repeat_msg_key]['msgs']
@@ -1782,15 +1810,15 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 						del msgs[-1]
 				REPEAT_MSGS[repeat_msg_key]['msgs'] = msgs
 				if message.channel.last_message_id != msgs[-1].id:
-					rxnEmoji = ['📜','🖨','❎','🔔','🔕']
+					rxnEmoji = ['📜','🧾','🖨','❎','🔔','🔕']
 				else:
-					rxnEmoji = ['📜','❎','🔔','🔕']
+					rxnEmoji = ['📜','🧾','❎','🔔','🔕']
 			else:
 				msgs = [await message.channel.send(embed=e) for e in embeds]
 				if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
-					rxnEmoji = ['📜','🔔','🔕']
+					rxnEmoji = ['📜','🧾','🔔','🔕']
 				else:
-					rxnEmoji = ['📜','🔄','🔔','🔕']
+					rxnEmoji = ['📜','🧾','🔄','🔔','🔕']
 	
 		msg = msgs[-1]
 		
@@ -1823,6 +1851,10 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 				else:
 					await message_clear_reactions(msg, message)
 				await legend(message)
+				return
+			elif str(reaction.emoji) == '🧾':
+				await message_clear_reactions(msg, message)
+				asyncio.create_task(summary(message=message, content=content))
 				return
 			elif str(reaction.emoji) == '🖨':
 				await message_clear_reactions(msg, message, reactions=['🖨'])
@@ -1883,40 +1915,24 @@ async def list_transfers_cmd(context, *, content="", repeat_msg_key=None):
 		logger.warning("Exception in t/list: {}".format(e))
 
 async def modify(message, content=""):
+	content=content.strip()
 	if await CommandPrecheck(message):
 		async with message.channel.typing():
 			allOnly = content.strip() == ""
 			torrents = []
 			if not allOnly:
-				id_list = strListToList(content)
-				filter_by = None
-				sort_by = None
-				filter_regex = None
-				num_results = None
-				if not id_list:
-					filter_by, sort_by, filter_regex, num_results = torGetListOpsFromStr(content)
-					if filter_by is not None and filter_by == -1:
-						await message.channel.send("Invalid filter specified. Choose one of {}".format(str(filter_names_full)))
-						return
-					if sort_by is not None and sort_by == -1:
-						await message.channel.send("Invalid sort specified. Choose one of {}".format(str(sort_names)))
-						return
-					if num_results is not None and num_results <= 0:
-						await message.channel.send("Must specify integer greater than 0 for `-N`!")
-						return
 
 				if CONFIG['delete_command_messages']:
 					try:
 						await message.delete()
 					except:
 						pass
+				
+				torrents, errStr = get_torrent_list_from_command_str(content)
 			
-				if TSCLIENT is None:
-					reload_client()
-			
-				if len(REPEAT_MSGS) == 0:
-					reload_client()
-				torrents = TSCLIENT.get_torrents_by(filter_by=filter_by, sort_by=sort_by, filter_regex=filter_regex, id_list=id_list, num_results=num_results)
+				if errStr != "":
+					await message.channel.send(errStr)
+					return
 
 				if len(torrents) > 0:
 					ops = ["pause","resume","remove","removedelete","verify"]
@@ -2243,7 +2259,7 @@ async def LegendGetEmbed(embed_data=None):
 	embed.add_field(name="Error ‼️", value=joinChar.join(["✅—none","⚠️—tracker  warning","🌐—tracker  error","🖥—local  error"]), inline=not isCompact)
 	embed.add_field(name="Activity 📈", value=joinChar.join(["🐢—stalled","🐇—active","🚀—running (rate>0)"]), inline=not isCompact)
 	embed.add_field(name="Tracker 📡", value=joinChar.join(["🔐—private","🔓—public"]), inline=not isCompact)
-	embed.add_field(name="Messages 💬", value=joinChar.join(["🔄—auto-update message","❎—cancel auto-update","🖨—reprint at bottom"]), inline=not isCompact)
+	embed.add_field(name="Messages 💬", value=joinChar.join(["🔄—auto-update message","❎—cancel auto-update","🖨—reprint at bottom", "🧾—summarize listed transfers"]), inline=not isCompact)
 	embed.add_field(name="Notifications 📣", value=joinChar.join(["🔔—enable","🔕—disable"]), inline=not isCompact)
 	return embed
 
@@ -2351,10 +2367,12 @@ async def help(message, content=""):
 			if content in ["l","list"]:
 				embed = discord.Embed(title='List transfers', color=0xb51a00)
 				embed.set_author(name="List current transfers with sorting, filtering, and search options", icon_url=CONFIG['logo_url'])
-				embed.add_field(name="Usage", value='`{0}list [--filter FILTER] [--sort SORT] [-N NUM_RESULTS] [NAME]`'.format(CONFIG['bot_prefix']), inline=False)
+				embed.add_field(name="Usage", value='`{0}list [--filter FILTER] [--sort SORT] [--tracker TRACKER] [-N NUM_RESULTS] [TORRENT_ID_SPECIFIER] [NAME]`'.format(CONFIG['bot_prefix']), inline=False)
 				embed.add_field(name="Filtering", value='`--filter FILTER` or `-f FILTER`\n`FILTER` is one of `{}`'.format(str(filter_names_full)), inline=False)
 				embed.add_field(name="Sorting", value='`--sort SORT` or `-s SORT`\n`SORT` is one of `{}`'.format(str(sort_names)), inline=False)
+				embed.add_field(name="Tracker", value='`--tracker TRACKER` or `-t TRACKER`\n`TRACKER` is a regular expression used to search transfer names (no enclosing quotes; may NOT contain spaces)', inline=False)
 				embed.add_field(name="Specify number of results to show", value='`-N NUM_RESULTS`\n`NUM_RESULTS` is an integer greater than 0', inline=False)
+				embed.add_field(name="By ID specifier", value='`TORRENT_ID_SPECIFIER` is a valid transfer ID specifier—*e.g.* `1,3-5,9` to specify transfers 1, 3, 4, 5, and 9\n*Transfer IDs are the left-most number in the list of transfers (use* `{0}list` *to print full list)*\n*Either TORRENT_ID_SPECIFIER or NAME can be specified, but not both*'.format(CONFIG['bot_prefix']), inline=False)
 				embed.add_field(name="Searching by name", value='`NAME` is a regular expression used to search transfer names (no enclosing quotes; may contain spaces)', inline=False)
 				embed.add_field(name="Examples", value="*List all transfers:* `{0}list`\n*Search using phrase 'ubuntu':* `{0}l ubuntu`\n*List downloading transfers:* `{0}l -f downloading`\n*List 10 most recently added transfers (sort transfers by age and specify number):* `{0}list --sort age -N 10`".format(CONFIG['bot_prefix']), inline=False)
 				await message.channel.send(embed=embed)
@@ -2367,19 +2385,25 @@ async def help(message, content=""):
 			elif content in ["m","modify"]:
 				embed = discord.Embed(title='Modify existing transfer(s)', color=0xb51a00)
 				embed.set_author(name="Pause, resume, remove, or remove and delete specified transfer(s)", icon_url=CONFIG['logo_url'])
-				embed.add_field(name="Usage", value='`{0}modify [LIST_OPTIONS] [TORRENT_ID_SPECIFIER]`'.format(CONFIG['bot_prefix']), inline=False)
+				embed.add_field(name="Usage", value='`{0}modify [LIST_OPTIONS]`'.format(CONFIG['bot_prefix']), inline=False)
 				embed.add_field(name="Pause or resume ALL transfers", value="Simply run `{0}modify` to pause or resume all existing transfers".format(CONFIG['bot_prefix']), inline=False)
 				embed.add_field(name="By list options", value='`LIST_OPTIONS` is a valid set of options to the `{0}list` command (see `{0}help list` for details)'.format(CONFIG['bot_prefix']), inline=False)
-				embed.add_field(name="By ID specifier", value='`TORRENT_ID_SPECIFIER` is a valid transfer ID specifier—*e.g.* `1,3-5,9` to specify transfers 1, 3, 4, 5, and 9\n*Transfer IDs are the left-most number in the list of transfers (use* `{0}list` *to print full list)*'.format(CONFIG['bot_prefix']), inline=False)
-				embed.add_field(name="Examples", value="`{0}modify`\n`{0}m seinfeld`\n`{0}m 23,34,36-42`\n`{0}m --filter downloading seinfeld`".format(CONFIG['bot_prefix']), inline=False)
+				embed.add_field(name="Examples", value="`{0}modify`\n`{0}m ubuntu`\n`{0}m 23,34,36-42`\n`{0}m --filter downloading ubuntu`".format(CONFIG['bot_prefix']), inline=False)
+				await message.channel.send(embed=embed)
+			elif content in ["s","summary"]:
+				embed = discord.Embed(title="Print summary of transfers", color=0xb51a00)
+				embed.set_author(name="Print summary of active transfer information", icon_url=CONFIG['logo_url'])
+				embed.add_field(name="Usage", value='`{0}summary [LIST_OPTIONS]`'.format(CONFIG['bot_prefix']), inline=False)
+				embed.add_field(name="By list options", value='`LIST_OPTIONS` is a valid set of options to the `{0}list` command (see `{0}help list` for details)'.format(CONFIG['bot_prefix']), inline=False)
+				embed.add_field(name="Examples", value="`{0}summary`\n`{0}s --filter private`\n`{0}s 23,34,36-42`\n`{0}s --filter downloading ubuntu`".format(CONFIG['bot_prefix']), inline=False)
 				await message.channel.send(embed=embed)
 		else:
 			embed = discord.Embed(title='List of commands:', color=0xb51a00)
 			embed.set_author(name='Transmission Bot: Manage torrent file transfers', icon_url=CONFIG['logo_url'])
-			embed.add_field(name="Print summary of transfers", value="*print summary from all transfers, with followup options to list transfers*\n*ex.* `{0}summary` or `{0}s`".format(CONFIG['bot_prefix']), inline=False)
-			embed.add_field(name="List torrent transfers", value="*list current transfers with sorting, filtering, and search options*\n*ex.* `{0}list [OPTIONS]` or `{0}l [OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name="Add new torrent transfers", value="*add one or more specified torrents by magnet link, url to torrent file, or by attaching a torrent file*\n*ex.* `{0}add TORRENT ...` or `{0}a TORRENT ...`".format(CONFIG['bot_prefix']), inline=False)
-			embed.add_field(name="Modify existing transfers", value="*pause, resume, remove, or remove and delete specified transfers*\n*ex.* `{0}modify [TORRENT]` or `{0}m [TORRENT]`".format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name="Modify existing transfers", value="*pause, resume, remove, or remove and delete specified transfers*\n*ex.* `{0}modify [LIST_OPTIONS]` or `{0}m [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name="List torrent transfers", value="*list current transfers with sorting, filtering, and search options*\n*ex.* `{0}list [LIST_OPTIONS]` or `{0}l [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name="Print summary of transfers", value="*print summary for specified transfers, with followup options to list subsets of those transfers*\n*ex.* `{0}summary [LIST_OPTIONS]` or `{0}s [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name='Toggle output style', value='*toggle between desktop (default), mobile (narrow), or smart selection of output style*\n*ex.* `{0}compact` or {0}c'.format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name='Toggle notifications', value='*toggle notifications regarding transfer state changes to be checked every {1} seconds (can be changed in config file)*\n*ex.* `{0}notifications` or {0}n'.format(CONFIG['bot_prefix'], CONFIG['notification_freq']), inline=False)
 			embed.add_field(name='Show legend', value='*prints legend showing the meaning of symbols used in the output of other commands*\n*ex.* `{0}legend`'.format(CONFIG['bot_prefix']), inline=False)
