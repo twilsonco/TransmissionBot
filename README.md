@@ -1,5 +1,5 @@
 # Transmission Discord Bot
-A python [Discord.py](https://github.com/Rapptz/discord.py) bot for controlling an instance of [Transmission](https://transmissionbt.com), the bittorrent client, using the [transmissionrpc](https://pythonhosted.org/transmissionrpc/) python library.
+A self-hosted python [Discord.py](https://github.com/Rapptz/discord.py) bot for controlling an instance of [Transmission](https://transmissionbt.com) from a **private** Discord server, the bittorrent client, using the [transmissionrpc](https://pythonhosted.org/transmissionrpc/) python library.
 This bot is built on [kkrypt0nn's bot template](https://github.com/kkrypt0nn/Python-Discord-Bot-Template) and adapted from [leighmacdonald's transmission scripts](https://github.com/leighmacdonald/transmission_scripts).
 
 ## Features overview
