@@ -13,10 +13,23 @@ Using the [transmissionrpc](https://pythonhosted.org/transmissionrpc/) python li
 * [`t/help` for usage information](#help)
 
 ## Example images
-* Top row: Transfer summary and symbol legend
-* Bottom row: List transfers, modify transfers, and notifications
+* Various images of TransmissionBot interaction through DM (light mode images) and in-channel (dark mode images)
+* Going left to right, top to bottom for light mode images
+	* Adding new transfers from torrent file (can also add magnet links or a url to a torrent file)
+	* Listing transfers (with filtering, sorting, regex searching by name and tracker, etc.)
+	* Modifying transfers
+		* All transfers for pause/resume
+		* Or by transfer name (with filtering etc.) for pause/resume/remove/remove-delete/verify, with confirmation for removal
+	* Notifications via DM (can opt-in to notificaitons for any transfers, and users get notifications for transfers they added)
+	* Transfer summary, followed up by listing running tranfers via reaction click
+* Dark mode images
+	* Mostly the same stuff but with commands send in-channel
+	* Note that reactions are removed when no longer necessary to keep the channel clean
+	* In-channel notifications for a variety of (customizable) transfer state changes
+	* Second dark mode image: list tranfers by name regex search, followed up by summary of listed transfers via reaction click
+	
 
-![summary](https://github.com/twilsonco/TransmissionBot/blob/master/example%20images.png?raw=true)
+![summary](https://github.com/twilsonco/TransmissionBot/blob/master/example%20image%20collage.png?raw=true)
 
 
 ## Install
