@@ -50,7 +50,7 @@ CONFIG = {
 	 "blacklist_user_ids": [], # discord users disallowed to use bot
 	 "owner_user_ids": [], # discord users given full access
 	"DM_compact_output_user_ids": [], # DO NOT EDIT MANUALLY! if a user id is in this list, that user will get compact output via DM (changed by t/compact command)
-	"reaction_wait_timeout": 1800, # seconds the bot should wait for a reaction to be clicked by a user
+	"reaction_wait_timeout": 7200, # seconds the bot should wait for a reaction to be clicked by a user
 	  "delete_command_messages": False, # delete command messages from users
 	 "delete_command_message_private_torrent": True, # deletes command message if that message contains one or more torrent files that use a private tracker
 	 "private_transfers_protected": True, # prevent transfers on private trackers from being removed
@@ -238,8 +238,6 @@ class OutputMode(Enum):
 	MOBILE = 3
 	
 OUTPUT_MODE = OutputMode.AUTO
-
-COMPACT_OUTPUT = False
 
 REPEAT_MSG_IS_PINNED = False
 REPEAT_MSGS = {}
@@ -789,10 +787,10 @@ def check_for_transfer_changes():
 		'new':{'name':"🟢 {0} new transfer{1}", 'data':newTransfers},
 		'removed':{'name':"❌ {0} removed transfer{1}", 'data':removedTransfers},
 		'error':{'name':"‼️ {0} transfer{1} with error{1}", 'data':errorTransfers},
-		'downloaded':{'name':"⬇️ {0} transfer{1} finished downloading", 'data':downloadedTransfers},
+		'downloaded':{'name':"⬇️ {0} transfer{1} downloaded", 'data':downloadedTransfers},
 		'stalled':{'name':"🐢 {0} transfer{1} stalled", 'data':stalledTransfers},
-		'unstalled':{'name':"🐇 {0} previously stalled transfer{1} now active", 'data':unstalledTransfers},
-		'finished':{'name':"🏁 {0} transfer{1} finished downloading and seeding", 'data':finishedTransfers},
+		'unstalled':{'name':"🐇 {0} stalled transfer{1} active", 'data':unstalledTransfers},
+		'finished':{'name':"🏁 {0} transfer{1} finished", 'data':finishedTransfers},
 		'stopped':{'name':"⏹ {0} transfer{1} paused", 'data':stoppedTransfers},
 		'started':{'name':"▶️ {0} transfer{1} resumed", 'data':startedTransfers}
 	}
@@ -1009,16 +1007,16 @@ async def on_ready():
 	if CONFIG['notification_enabled']:
 		task = asyncio.create_task(loop_notifications())
 		
-def humantime(S): # return humantime for a number of seconds. If time is more than 36 hours, return only the largest rounded time unit (e.g. 2 days or 3 months)
+def humantime(S, compact_output=(OUTPUT_MODE == OutputMode.MOBILE)): # return humantime for a number of seconds. If time is more than 36 hours, return only the largest rounded time unit (e.g. 2 days or 3 months)
 	S = int(S)
 	if S == -2:
-		return '?' if COMPACT_OUTPUT else 'Unknown'
+		return '?' if compact_output else 'Unknown'
 	elif S == -1:
 		return 'N/A'
 	elif S < 0:
 		return 'N/A'
 		
-	if COMPACT_OUTPUT:
+	if compact_output:
 		dStr = "dy"
 		wStr = "wk"
 		moStr = "mth"
@@ -1095,26 +1093,23 @@ def tobytes(B):
 		if numstr[1] in prefix[0]:
 			return float(float(numstr[0]) * prefix[1])
 	
-async def IsCompactOutput(message):
+def IsCompactOutput(message):
 	if isDM(message):
 		if message.author.id in CONFIG['DM_compact_output_user_ids']:
-			return OutputMode.MOBILE
+			return True
 		else:
-			return OutputMode.DESKTOP
+			return False
 	elif OUTPUT_MODE == OutputMode.AUTO:
 		user = message.author
 		if user.is_on_mobile():
-			return OutputMode.MOBILE
+			return True
 		else:
-			return OutputMode.DESKTOP
+			return False
 	else:
-		return OUTPUT_MODE
+		return False
 		
 # check that message author is allowed and message was sent in allowed channel
 async def CommandPrecheck(message, whitelist=CONFIG['whitelist_user_ids']):
-	# first set output mode
-	global COMPACT_OUTPUT
-	COMPACT_OUTPUT = await IsCompactOutput(message) == OutputMode.MOBILE
 	if not isDM(message) and not CONFIG['listen_all_channels'] and message.channel.id not in CONFIG['listen_channel_ids']:
 		await message.channel.send("I don't respond to commands in this channel...")
 		await asyncio.sleep(2)
@@ -1337,7 +1332,7 @@ def numTorInState(torrents, state):
 	else:
 		return 0
 
-def torSummary(torrents, repeat_msg_key=None, show_repeat=True):
+def torSummary(torrents, repeat_msg_key=None, show_repeat=True, compact_output=(OUTPUT_MODE == OutputMode.MOBILE)):
 	numInState = [numTorInState(torrents,s) for s in torStates]
 	numTot = len(torrents)
 	
@@ -1370,12 +1365,12 @@ def torSummary(torrents, repeat_msg_key=None, show_repeat=True):
 	embed.add_field(name="⬇️ {}/s".format(totDownRate), value="⬆️ {}/s".format(totUpRate), inline=False)
 	embed.add_field(name="⏬ {} of {}".format(totDown,totSize), value="⏫ {}  ⚖️ {}".format(totUp,totRatio), inline=False)
 	embed.add_field(name="↕️ {} transfer{}".format(numTot, 's' if numTot != 1 else ''), value=' '.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[:6], numInState[:6])]), inline=False)
-	if COMPACT_OUTPUT:
+	if compact_output:
 		embed.add_field(name=' '.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[11:], numInState[11:])]), value=' '.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[6:9], numInState[6:9])]) + "—" + ' '.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[9:11], numInState[9:11])]), inline=False)
 	else:
-		embed.add_field(name="{} Error{}{}".format(numInState[11], 's' if numInState[11] != 1 else '', ' ‼️' if numInState[11] > 0 else ''), value='\n'.join(['{} {}'.format(i,"**{}**".format(j) if i != '✅' and j > 0 else j) for i,j in zip(torStateEmoji[12:], numInState[12:])]), inline=not COMPACT_OUTPUT)
-		embed.add_field(name="Activity", value='\n'.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[6:9], numInState[6:9])]), inline=not COMPACT_OUTPUT)
-		embed.add_field(name="Tracker", value='\n'.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[9:11], numInState[9:11])]), inline=not COMPACT_OUTPUT)
+		embed.add_field(name="{} Error{}{}".format(numInState[11], 's' if numInState[11] != 1 else '', ' ‼️' if numInState[11] > 0 else ''), value='\n'.join(['{} {}'.format(i,"**{}**".format(j) if i != '✅' and j > 0 else j) for i,j in zip(torStateEmoji[12:], numInState[12:])]), inline=not compact_output)
+		embed.add_field(name="Activity", value='\n'.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[6:9], numInState[6:9])]), inline=not compact_output)
+		embed.add_field(name="Tracker", value='\n'.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[9:11], numInState[9:11])]), inline=not compact_output)
 		
 	freq = REPEAT_MSGS[repeat_msg_key]['freq'] if repeat_msg_key else None
 	if show_repeat:
@@ -1405,7 +1400,7 @@ async def summary(message, content="", repeat_msg_key=None):
 				await message.channel.send(errStr)
 				return
 				
-			summaryData=torSummary(torrents, repeat_msg_key=repeat_msg_key, show_repeat=isDM(message))
+			summaryData=torSummary(torrents, repeat_msg_key=repeat_msg_key, show_repeat=not isDM(message), compact_output=IsCompactOutput(message))
 			
 			if content != "":
 				summaryData[0].description = "Summary of transfers matching '`{}`'\n".format(content) + summaryData[0].description
@@ -1589,7 +1584,7 @@ def strListToList(strList):
 	return outList
 
 
-def torList(torrents, author_name="Torrent Transfers",title=None,description=None):
+def torList(torrents, author_name="Torrent Transfers",title=None,description=None, compact_output=(OUTPUT_MODE == OutputMode.MOBILE)):
 	states = ('downloading', 'seeding', 'stopped', 'finished','checking','check pending','download pending','upload pending')
 	stateEmoji = {i:j for i,j in zip(states,['🔻','🌱','⏸','🏁','🔬','🔬','🚧','🚧'])}
 	errorStrs = ['✅','⚠️','🌐','🖥']
@@ -1602,11 +1597,11 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 				eta = int(t.eta)
 			except:
 				eta = 0
-		if COMPACT_OUTPUT:
+		if compact_output:
 			down = humanbytes(t.progress * 0.01 * t.totalSize, d=0)
 			out = "{}{} ".format(stateEmoji[t.status],errorStrs[t.error] if t.error != 0 else '')
 			if t.status == 'downloading':
-				out += "{}% {} {}{}/s{}".format(int(t.progress), down, '' if eta <= 0 else '{}@'.format(humantime(eta)), humanbytes(t.rateDownload, d=0), ' *{}/s* {:.1f}'.format(humanbytes(t.rateUpload, d=0), t.uploadRatio) if t.isStalled else '')
+				out += "{}% {} {}{}/s{}".format(int(t.progress), down, '' if eta <= 0 else '{}@'.format(humantime(eta, compact_output=compact_output)), humanbytes(t.rateDownload, d=0), ' *{}/s* {:.1f}'.format(humanbytes(t.rateUpload, d=0), t.uploadRatio) if t.isStalled else '')
 			elif t.status == 'seeding':
 				out += "{} *{}/s*:{:.1f}".format(down, humanbytes(t.rateUpload, d=0), t.uploadRatio)
 			elif t.status == 'stopped':
@@ -1619,7 +1614,7 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 			down = humanbytes(t.progress * 0.01 * t.totalSize)
 			out = "{} {} {} {} ".format(stateEmoji[t.status],errorStrs[t.error],'🚀' if t.rateDownload + t.rateUpload > 0 else '🐢' if t.isStalled else '🐇', '🔐' if t.isPrivate else '🔓')
 			if t.status == 'downloading':
-				out += "{:.1f}% of {} ⏬, {} {}/s ⬇️, *{}/s* ⬆️, *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), '' if eta <= 0 else '\n⏳ {} @ '.format(humantime(eta)), humanbytes(t.rateDownload), humanbytes(t.rateUpload), t.uploadRatio)
+				out += "{:.1f}% of {} ⏬, {} {}/s ⬇️, *{}/s* ⬆️, *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), '' if eta <= 0 else '\n⏳ {} @ '.format(humantime(eta, compact_output=compact_output)), humanbytes(t.rateDownload), humanbytes(t.rateUpload), t.uploadRatio)
 			elif t.status == 'seeding':
 				out += "{} ⏬, *{}/s* ⬆️, *{:.2f}* ⚖️".format(humanbytes(t.totalSize, d=1), humanbytes(t.rateUpload), t.uploadRatio)
 			elif t.status == 'stopped':
@@ -1633,7 +1628,7 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 				out += "\n***Error:*** *{}*".format(t.errorString)
 		return out
 	
-	if COMPACT_OUTPUT:
+	if compact_output:
 		nameList = ["{}){:.26}{}".format(t.id,t.name,"..." if len(t.name) > 26 else "") for t in torrents]
 	else:
 		nameList = ["{}) {:.245}{}".format(t.id,t.name,"..." if len(t.name) > 245 else "") for t in torrents]
@@ -1814,7 +1809,7 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 				await message.channel.send(errStr)
 				return
 				
-			embeds = torList(torrents, title="{} transfer{} matching '`{}`'".format(len(torrents),'' if len(torrents)==1 else 's',content))
+			embeds = torList(torrents, title="{} transfer{} matching '`{}`'".format(len(torrents),'' if len(torrents)==1 else 's',content), compact_output=IsCompactOutput(message))
 		
 			if isDM(message):
 				embeds[-1].set_footer(text="📜 Legend, 🧾 Summarize, 🖨 Reprint")
@@ -1979,7 +1974,7 @@ async def modify(message, content=""):
 					opNames = ["pause","resume","remove","remove and delete","verify"]
 					opEmoji = ['⏸','▶️','❌','🗑','🔬']
 					opStr = "⏸pause ▶️resume ❌remove 🗑remove  and  delete 🔬verify"
-					embeds = torList(torrents,author_name="Click a reaction to choose modification".format(len(torrents), '' if len(torrents)==1 else 's'),title="{} transfer{} matching '`{}`' will be modified".format(len(torrents), '' if len(torrents)==1 else 's', content))
+					embeds = torList(torrents,author_name="Click a reaction to choose modification".format(len(torrents), '' if len(torrents)==1 else 's'),title="{} transfer{} matching '`{}`' will be modified".format(len(torrents), '' if len(torrents)==1 else 's', content), compact_output=IsCompactOutput(message))
 				else:
 					embed=discord.Embed(title="Modify transfers",color=0xb51a00)
 					embed.set_author(name="No matching transfers found!", icon_url=CONFIG['logo_url'])
@@ -2289,7 +2284,7 @@ async def toggle_compact_out_cmd(context):
 		await toggle_compact_out(context.message)
 
 async def LegendGetEmbed(embed_data=None):
-	isCompact = False #COMPACT_OUTPUT
+	isCompact = False #compact_output
 	joinChar = ',' if isCompact else '\n'
 	if embed_data:
 		embed = discord.Embed.from_dict(embed_data)
@@ -2405,7 +2400,7 @@ async def on_message(message):
 
 client.remove_command('help')
 
-async def help(message, content=""):
+async def help(message, content="", compact_output=(OUTPUT_MODE == OutputMode.MOBILE)):
 	if await CommandPrecheck(message):
 		if content != "":
 			if content in ["l","list"]:
@@ -2453,7 +2448,7 @@ async def help(message, content=""):
 			embed.add_field(name='Show legend', value='*prints legend showing the meaning of symbols used in the output of other commands*\n*ex.* `{0}legend`'.format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name='Help - Gives this menu', value='*with optional details of specified command*\n*ex.* `{0}help` or `{0}help COMMAND`'.format(CONFIG['bot_prefix']), inline=False)
 			
-			# if not COMPACT_OUTPUT:
+			# if not compact_output:
 			# 	legendEmbed=await LegendGetEmbed()
 			# 	embed.add_field(name=legendEmbed.title, value='', inline=False)
 			# 	for f in legendEmbed.fields:
