@@ -40,76 +40,78 @@ Bot configuration:
 3. comment or remove the configuration below, as the config.json will be used instead (this also makes updating to new versions easier)
 """
 CONFIG = {
-    "tsclient": { # information for transmission remote web gui
-        'host': "192.168.0.2",
-        'port': 9091,
-        'user': "USERNAME",
-        'password': "PASSWORD"
-    },
-    "whitelist_user_ids": [], # discord users allowed to use bot
-    "blacklist_user_ids": [], # discord users disallowed to use bot
-    "owner_user_ids": [], # discord users given full access
-     "delete_command_messages": False, # delete command messages from users
-    "delete_command_message_private_torrent": True, # deletes command message if that message contains one or more torrent files that use a private tracker
-    "private_transfers_protected": True, # prevent transfers on private trackers from being removed
-    "private_transfer_protection_added_user_override": True, # if true, the user that added a private transfer can remove it regardless of 'private_transfers_protected'
-    "whitelist_user_can_remove": True, # if true, whitelisted users can remove any transfer
-    "whitelist_user_can_delete": True, # if true, whitelisted users can remove and delete any transfer
-    "whitelist_added_user_remove_delete_override": True, # if true, override both 'whitelist_user_can_remove' and 'whitelist_user_can_delete' allowing whitelisted users to remove and delete transfers they added
-    "bot_prefix": "t/", # bot command prefix
-    "bot_token": "BOT_TOKEN", # bot token
-    "dryrun": False, # if true, no changes are actually applied to transfers
-    "listen_channel_ids": [], # channels in which to listen for commands
-    "listen_all_channels": False, # if true, listen for commands in all text channels
-    "listen_DMs": True, # listen for commands via DM to the bot
-    "logo_url": "https://iyanovich.files.wordpress.com/2009/04/transmission-logo.png", # URL to logo that appears in some output
-    "notification_channel_id": 'NOTIFICATION_CHANNEL_ID', # channel to which in-channel notificatations will be posted
-    "notification_enabled": True, # if False, in-channel and DM notifications are disabled
-    "notification_enabled_in_channel": True, # if False, in-channel notifications are disabled, but DM notifications will still work
-    "notification_freq": 300, # number of seconds between checking transfers and posting notifications
-    "notification_reaction_check_factor": 2, # determines how long DM notification subscription reactions will be monitored on in-channel and DM notifications; they're monitored for (notification_reaction_check_factor X notification_freq) seconds
-    "notification_DM_opt_out_user_ids": [], # DON'T MODIFY (used by bot to record users that have opted out of receiving DM notifications)
-    "notification_states":{ # determines the types of transfer state changes that are reported in notifications...
-        "in_channel": # ...for in-channel notifications, (this is the full list of potential state changes)
-        [
-            "new",
-            "removed",
-            "error",
-            "downloaded",
-            "stalled",
-            "unstalled",
-            "finished",
-            "stopped",
-            "started"
-        ],
-        "notified_users": # ...DM notifications for users that opted in to DM notifications for transfer(s)
-        [
-            "removed",
-            "error",
-            "downloaded",
-            "stalled",
-            "unstalled",
-            "finished",
-            "stopped",
-            "started"
-        ],
-        "added_user":# ...and DM notifications to users that added transfers
-        [
-            "removed",
-            "error",
-            "downloaded",
-            "stalled",
-            "unstalled",
-            "finished",
-            "stopped",
-            "started"
-        ]
-    },
-    "repeat_cancel_verbose": True, # if true, print message when auto-update is canceled for a message
-    "repeat_freq": 2, # number of seconds between updating an auto-update message
-    "repeat_timeout": 3600, # number of seconds before an auto-update message times out
-    "repeat_timeout_verbose": True, # if true, print message when auto-update message times out
-    "summary_num_top_ratio": 5 # number of top seed-ratio transfers to show at the bottom of the summary output
+	 "tsclient": { # information for transmission remote web gui
+		 'host': "192.168.0.2",
+		 'port': 9091,
+		 'user': "USERNAME",
+		 'password': "PASSWORD"
+	 },
+	 "whitelist_user_ids": [], # discord users allowed to use bot
+	 "blacklist_user_ids": [], # discord users disallowed to use bot
+	 "owner_user_ids": [], # discord users given full access
+	"DM_compact_output_user_ids": [], # DO NOT EDIT MANUALLY! if a user id is in this list, that user will get compact output via DM (changed by t/compact command)
+	"reaction_wait_timeout": 1800, # seconds the bot should wait for a reaction to be clicked by a user
+	  "delete_command_messages": False, # delete command messages from users
+	 "delete_command_message_private_torrent": True, # deletes command message if that message contains one or more torrent files that use a private tracker
+	 "private_transfers_protected": True, # prevent transfers on private trackers from being removed
+	 "private_transfer_protection_added_user_override": True, # if true, the user that added a private transfer can remove it regardless of 'private_transfers_protected'
+	 "whitelist_user_can_remove": True, # if true, whitelisted users can remove any transfer
+	 "whitelist_user_can_delete": True, # if true, whitelisted users can remove and delete any transfer
+	 "whitelist_added_user_remove_delete_override": True, # if true, override both 'whitelist_user_can_remove' and 'whitelist_user_can_delete' allowing whitelisted users to remove and delete transfers they added
+	 "bot_prefix": "t/", # bot command prefix
+	 "bot_token": "BOT_TOKEN", # bot token
+	 "dryrun": False, # if true, no changes are actually applied to transfers
+	 "listen_channel_ids": [], # channels in which to listen for commands
+	 "listen_all_channels": False, # if true, listen for commands in all text channels
+	 "listen_DMs": True, # listen for commands via DM to the bot
+	 "logo_url": "https://iyanovich.files.wordpress.com/2009/04/transmission-logo.png", # URL to logo that appears in some output
+	 "notification_channel_id": 'NOTIFICATION_CHANNEL_ID', # channel to which in-channel notificatations will be posted
+	 "notification_enabled": True, # if False, in-channel and DM notifications are disabled
+	 "notification_enabled_in_channel": True, # if False, in-channel notifications are disabled, but DM notifications will still work
+	 "notification_freq": 300, # number of seconds between checking transfers and posting notifications
+	 "notification_reaction_check_factor": 2, # determines how long DM notification subscription reactions will be monitored on in-channel and DM notifications; they're monitored for (notification_reaction_check_factor X notification_freq) seconds
+	 "notification_DM_opt_out_user_ids": [], # DON'T MODIFY (used by bot to record users that have opted out of receiving DM notifications)
+	 "notification_states":{ # determines the types of transfer state changes that are reported in notifications...
+		 "in_channel": # ...for in-channel notifications, (this is the full list of potential state changes)
+		 [
+			 "new",
+			 "removed",
+			 "error",
+			 "downloaded",
+			 "stalled",
+			 "unstalled",
+			 "finished",
+			 "stopped",
+			 "started"
+		 ],
+		 "notified_users": # ...DM notifications for users that opted in to DM notifications for transfer(s)
+		 [
+			 "removed",
+			 "error",
+			 "downloaded",
+			 "stalled",
+			 "unstalled",
+			 "finished",
+			 "stopped",
+			 "started"
+		 ],
+		 "added_user":# ...and DM notifications to users that added transfers
+		 [
+			 "removed",
+			 "error",
+			 "downloaded",
+			 "stalled",
+			 "unstalled",
+			 "finished",
+			 "stopped",
+			 "started"
+		 ]
+	 },
+	 "repeat_cancel_verbose": True, # if true, print message when auto-update is canceled for a message
+	 "repeat_freq": 2, # number of seconds between updating an auto-update message
+	 "repeat_timeout": 3600, # number of seconds before an auto-update message times out
+	 "repeat_timeout_verbose": True, # if true, print message when auto-update message times out
+	 "summary_num_top_ratio": 5 # number of top seed-ratio transfers to show at the bottom of the summary output
 }
 
 TSCLIENT_CONFIG = None
@@ -1007,30 +1009,47 @@ async def on_ready():
 	if CONFIG['notification_enabled']:
 		task = asyncio.create_task(loop_notifications())
 		
-def humanseconds(S):
+def humantime(S): # return humantime for a number of seconds. If time is more than 36 hours, return only the largest rounded time unit (e.g. 2 days or 3 months)
+	S = int(S)
 	if S == -2:
 		return '?' if COMPACT_OUTPUT else 'Unknown'
 	elif S == -1:
 		return 'N/A'
 	elif S < 0:
 		return 'N/A'
+		
+	if COMPACT_OUTPUT:
+		dStr = "dy"
+		wStr = "wk"
+		moStr = "mth"
+		yStr = "yr"
+	else:
+		dStr = "day"
+		wStr = "week"
+		moStr = "month"
+		yStr = "year"
 	
 	M = 60
 	H = M * 60
 	D = H * 24
 	W = D * 7
+	MO = D * 30
+	Y = MO * 12
 	
-	w,s = divmod(S,W)
-	d,s = divmod(s,D)
-	h,s = divmod(s,H)
+	y,s = divmod(S,MO*11.5) # round 11 months to 1 year
+	mo,s = divmod(S,W*3.5)
+	w,s = divmod(S,D*6.5)
+	d,s = divmod(S,D*1.5)
+	for t,td,tStr in zip([y,mo,w,d],[Y,MO,W,D],[yStr,moStr,wStr,dStr]):
+		if t >= 1:
+			t = round(S/td)
+			out = "{} {}{}".format(t, tStr, '' if t == 1 else 's')
+			return out
+	
+	h,s = divmod(S,H)
 	m,s = divmod(s,M)
 	
-	if COMPACT_OUTPUT:
-		d += w * 7
-		out = '{}{:02d}:{:02d}:{:02d}'.format('' if d == 0 else '{}-'.format(d), h, m, s)
-	else:
-		out = '{}{}{:02d}:{:02d}:{:02d}'.format('' if w == 0 else '{} week{}, '.format(w,'' if w == 1 else 's'), '' if d == 0 else '{} day{}, '.format(d,'' if d == 1 else 's'), h, m, s)
-		
+	out = '{:02d}:{:02d}:{:02d}'.format(h, m, s)
 	return out
 
 def humanbytes(B,d = 2):
@@ -1077,12 +1096,13 @@ def tobytes(B):
 			return float(float(numstr[0]) * prefix[1])
 	
 async def IsCompactOutput(message):
-	if OUTPUT_MODE == OutputMode.AUTO:
-		if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
-			return OutputMode.DESKTOP
-			#user = client.get_user(message.author.id)
+	if isDM(message):
+		if message.author.id in CONFIG['DM_compact_output_user_ids']:
+			return OutputMode.MOBILE
 		else:
-			user = message.author
+			return OutputMode.DESKTOP
+	elif OUTPUT_MODE == OutputMode.AUTO:
+		user = message.author
 		if user.is_on_mobile():
 			return OutputMode.MOBILE
 		else:
@@ -1095,12 +1115,12 @@ async def CommandPrecheck(message, whitelist=CONFIG['whitelist_user_ids']):
 	# first set output mode
 	global COMPACT_OUTPUT
 	COMPACT_OUTPUT = await IsCompactOutput(message) == OutputMode.MOBILE
-	if (message.author.dm_channel is None or message.channel.id != message.author.dm_channel.id) and not CONFIG['listen_all_channels'] and message.channel.id not in CONFIG['listen_channel_ids']:
+	if not isDM(message) and not CONFIG['listen_all_channels'] and message.channel.id not in CONFIG['listen_channel_ids']:
 		await message.channel.send("I don't respond to commands in this channel...")
 		await asyncio.sleep(2)
 		await message.delete()
 		return False
-	if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id and not CONFIG['listen_DMs']:
+	if isDM(message) and not CONFIG['listen_DMs']:
 		await message.channel.send("I don't respond to DMs...")
 		await asyncio.sleep(2)
 		await message.delete()
@@ -1112,8 +1132,12 @@ async def CommandPrecheck(message, whitelist=CONFIG['whitelist_user_ids']):
 		return False
 	return True
 
+
+def isDM(message):
+	return (message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id)
+
 async def message_clear_reactions(message, parent_message, reactions=[]):
-	if parent_message.author.dm_channel is None or parent_message.channel.id != parent_message.author.dm_channel.id:
+	if not isDM(parent_message):
 		if reactions == []:
 			await message.clear_reactions()
 		else:
@@ -1147,7 +1171,7 @@ async def add(message, content = ""):
 			if content == "" and len(torFileList) == 0:
 				await message.channel.send("🚫 Invalid string")
 		
-			if CONFIG['delete_command_messages']:
+			if CONFIG['delete_command_messages'] and not isDM(message):
 				try:
 					await message.delete()
 				except:
@@ -1230,7 +1254,7 @@ async def add(message, content = ""):
 				if len(privateTransfers) > 0 or CONFIG['dryrun']:
 					footerStr = "🔐 One or more added torrents are using a private tracker, which may prohibit running the same transfer from multiple locations. Ensure that you're not breaking any private tracker rules."
 					if len(privateTransfers) > 0 and CONFIG['delete_command_message_private_torrent']:
-						if message.author.dm_channel is None or message.channel.id != message.author.dm_channel.id:
+						if not isDM(message):
 							try:
 								await message.delete()
 								footerStr += "\n(I erased the command message to prevent any unintentional sharing of torrent files)"
@@ -1349,15 +1373,15 @@ def torSummary(torrents, repeat_msg_key=None, show_repeat=True):
 	if COMPACT_OUTPUT:
 		embed.add_field(name=' '.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[11:], numInState[11:])]), value=' '.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[6:9], numInState[6:9])]) + "—" + ' '.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[9:11], numInState[9:11])]), inline=False)
 	else:
-		embed.add_field(name="{} Error{}".format(numInState[11], 's' if numInState[9] != 1 else ''), value='\n'.join(['{} {}'.format(i,"**{}**".format(j) if i != '✅' and j > 0 else j) for i,j in zip(torStateEmoji[12:], numInState[12:])]), inline=not COMPACT_OUTPUT)
+		embed.add_field(name="{} Error{}{}".format(numInState[11], 's' if numInState[11] != 1 else '', ' ‼️' if numInState[11] > 0 else ''), value='\n'.join(['{} {}'.format(i,"**{}**".format(j) if i != '✅' and j > 0 else j) for i,j in zip(torStateEmoji[12:], numInState[12:])]), inline=not COMPACT_OUTPUT)
 		embed.add_field(name="Activity", value='\n'.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[6:9], numInState[6:9])]), inline=not COMPACT_OUTPUT)
 		embed.add_field(name="Tracker", value='\n'.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[9:11], numInState[9:11])]), inline=not COMPACT_OUTPUT)
 		
 	freq = REPEAT_MSGS[repeat_msg_key]['freq'] if repeat_msg_key else None
 	if show_repeat:
-		embed.set_footer(text="{}📜 Symbol legend{}".format((topRatios + '\n') if numTopRatios > 0 else '', '\nUpdating every {} second{}—❎ to stop'.format(freq,'s' if freq != 1 else '') if repeat_msg_key else ', 🔄 to auto-update'))
+		embed.set_footer(text="{}📜 Legend, 🖨 Reprint{}".format((topRatios + '\n') if numTopRatios > 0 else '', '\nUpdating every {} second{}—❎ to stop'.format(freq,'s' if freq != 1 else '') if repeat_msg_key else ', 🔄 Auto-update'))
 	else:
-		embed.set_footer(text="{}📜 Symbol legend".format((topRatios + '\n') if numTopRatios > 0 else ''))
+		embed.set_footer(text="{}📜 Legend, 🖨 Reprint".format((topRatios + '\n') if numTopRatios > 0 else ''))
 	return embed,numInState
 
 
@@ -1369,7 +1393,7 @@ async def summary(message, content="", repeat_msg_key=None):
 			if not repeat_msg_key:
 				if len(REPEAT_MSGS) == 0:
 					reload_client()
-				if CONFIG['delete_command_messages']:
+				if CONFIG['delete_command_messages'] and not isDM(message):
 					try:
 						await message.delete()
 					except:
@@ -1381,7 +1405,7 @@ async def summary(message, content="", repeat_msg_key=None):
 				await message.channel.send(errStr)
 				return
 				
-			summaryData=torSummary(torrents, repeat_msg_key=repeat_msg_key, show_repeat=message.author.dm_channel is None or message.channel.id != message.author.dm_channel.id)
+			summaryData=torSummary(torrents, repeat_msg_key=repeat_msg_key, show_repeat=isDM(message))
 			
 			if content != "":
 				summaryData[0].description = "Summary of transfers matching '`{}`'\n".format(content) + summaryData[0].description
@@ -1399,17 +1423,17 @@ async def summary(message, content="", repeat_msg_key=None):
 			else:
 				await msg.edit(embed=summaryData[0])
 		
-			if message.channel.last_message_id != msg.id and (message.author.dm_channel is None or message.channel.id != message.author.dm_channel.id):
+			if message.channel.last_message_id != msg.id and not isDM(message):
 				stateEmoji = ('📜','🖨','❎','↕️') + torStateEmoji
 				stateEmojiFilterStartNum += 1
 			else:
 				stateEmoji = ('📜','❎','↕️') + torStateEmoji
 		else:
-			if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
-				stateEmoji = ('📜','↕️') + torStateEmoji
-				stateEmojiFilterStartNum -= 1
+			if isDM(message):
+				stateEmoji = ('📜','🖨','↕️') + torStateEmoji
 			else:
-				stateEmoji = ('📜','🔄','↕️') + torStateEmoji
+				stateEmoji = ('📜','🖨','🔄','↕️') + torStateEmoji
+				stateEmojiFilterStartNum += 1
 			msg = await message.channel.send(embed=summaryData[0])
 	
 		# to get actual list of reactions, need to re-fetch the message from the server
@@ -1476,7 +1500,7 @@ async def summary(message, content="", repeat_msg_key=None):
 				return user == message.author and reaction.message.id == msg.id and str(reaction.emoji) in stateEmoji
 		
 		try:
-			reaction, user = await client.wait_for('reaction_add', timeout=60.0 if not repeat_msg_key else REPEAT_MSGS[repeat_msg_key]['freq'], check=check)
+			reaction, user = await client.wait_for('reaction_add', timeout=CONFIG['reaction_wait_timeout'] if not repeat_msg_key else REPEAT_MSGS[repeat_msg_key]['freq'], check=check)
 		except asyncio.TimeoutError:
 			if not repeat_msg_key:
 				await message_clear_reactions(msg, message)
@@ -1507,9 +1531,17 @@ async def summary(message, content="", repeat_msg_key=None):
 				asyncio.create_task(repeat_command(summary, message=message, content=content, msg_list=[msg]))
 				return
 			elif str(reaction.emoji) == '🖨':
-				await message_clear_reactions(msg, message, reactions=['🖨'])
-				REPEAT_MSGS[repeat_msg_key]['reprint'] = True
-				return
+				if repeat_msg_key:
+					await message_clear_reactions(msg, message, reactions=['🖨'])
+					REPEAT_MSGS[repeat_msg_key]['reprint'] = True
+					return
+				else:
+					if not isDM(message):
+						try:
+							await msg.delete()
+						except:
+							pass
+					asyncio.create_task(summary(message=message, content=content))
 		if repeat_msg_key: # a final check to see if the user has cancelled the repeat by checking the count of the cancel reaction
 			cache_msg = await message.channel.fetch_message(msg.id)
 			for r in cache_msg.reactions:
@@ -1574,7 +1606,7 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 			down = humanbytes(t.progress * 0.01 * t.totalSize, d=0)
 			out = "{}{} ".format(stateEmoji[t.status],errorStrs[t.error] if t.error != 0 else '')
 			if t.status == 'downloading':
-				out += "{}% {} {}{}/s{}".format(int(t.progress), down, '' if eta <= 0 else '{}@'.format(humanseconds(eta)), humanbytes(t.rateDownload, d=0), ' *{}/s* {:.1f}'.format(humanbytes(t.rateUpload, d=0), t.uploadRatio) if t.isStalled else '')
+				out += "{}% {} {}{}/s{}".format(int(t.progress), down, '' if eta <= 0 else '{}@'.format(humantime(eta)), humanbytes(t.rateDownload, d=0), ' *{}/s* {:.1f}'.format(humanbytes(t.rateUpload, d=0), t.uploadRatio) if t.isStalled else '')
 			elif t.status == 'seeding':
 				out += "{} *{}/s*:{:.1f}".format(down, humanbytes(t.rateUpload, d=0), t.uploadRatio)
 			elif t.status == 'stopped':
@@ -1587,7 +1619,7 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 			down = humanbytes(t.progress * 0.01 * t.totalSize)
 			out = "{} {} {} {} ".format(stateEmoji[t.status],errorStrs[t.error],'🚀' if t.rateDownload + t.rateUpload > 0 else '🐢' if t.isStalled else '🐇', '🔐' if t.isPrivate else '🔓')
 			if t.status == 'downloading':
-				out += "{:.1f}% of {} ⏬, {} {}/s ⬇️, *{}/s* ⬆️, *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), '' if eta <= 0 else '\n⏳ {} @ '.format(humanseconds(eta)), humanbytes(t.rateDownload), humanbytes(t.rateUpload), t.uploadRatio)
+				out += "{:.1f}% of {} ⏬, {} {}/s ⬇️, *{}/s* ⬆️, *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), '' if eta <= 0 else '\n⏳ {} @ '.format(humantime(eta)), humanbytes(t.rateDownload), humanbytes(t.rateUpload), t.uploadRatio)
 			elif t.status == 'seeding':
 				out += "{} ⏬, *{}/s* ⬆️, *{:.2f}* ⚖️".format(humanbytes(t.totalSize, d=1), humanbytes(t.rateUpload), t.uploadRatio)
 			elif t.status == 'stopped':
@@ -1630,7 +1662,7 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 		embeds.append(discord.Embed(title=title, description="No matching transfers found!", color=0xb51a00))
 
 	embeds[-1].set_author(name=author_name, icon_url=CONFIG['logo_url'])
-	embeds[-1].set_footer(text="📜 Symbol legend")
+	embeds[-1].set_footer(text="📜 Legend")
 	
 	return embeds
 
@@ -1770,7 +1802,7 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 			if not repeat_msg_key:
 				if len(REPEAT_MSGS) == 0:
 					reload_client()
-				if CONFIG['delete_command_messages']:
+				if CONFIG['delete_command_messages'] and not isDM(message):
 					try:
 						await message.delete()
 					except:
@@ -1784,10 +1816,10 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 				
 			embeds = torList(torrents, title="{} transfer{} matching '`{}`'".format(len(torrents),'' if len(torrents)==1 else 's',content))
 		
-			if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
-				embeds[-1].set_footer(text="📜 Symbol legend, 🧾 Summarize")
+			if isDM(message):
+				embeds[-1].set_footer(text="📜 Legend, 🧾 Summarize, 🖨 Reprint")
 			else:
-				embeds[-1].set_footer(text="📜 Symbol legend, 🧾 Summarize{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_MSGS[repeat_msg_key]['freq'],'s' if REPEAT_MSGS[repeat_msg_key]['freq'] != 1 else '') if repeat_msg_key else ', 🔄 to auto-update'))
+				embeds[-1].set_footer(text="📜 Legend, 🧾 Summarize, 🖨 Reprint{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_MSGS[repeat_msg_key]['freq'],'s' if REPEAT_MSGS[repeat_msg_key]['freq'] != 1 else '') if repeat_msg_key else ', 🔄 Auto-update'))
 			
 			if repeat_msg_key:
 				msgs = REPEAT_MSGS[repeat_msg_key]['msgs']
@@ -1815,10 +1847,10 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 					rxnEmoji = ['📜','🧾','❎','🔔','🔕']
 			else:
 				msgs = [await message.channel.send(embed=e) for e in embeds]
-				if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id:
-					rxnEmoji = ['📜','🧾','🔔','🔕']
+				if isDM(message):
+					rxnEmoji = ['📜','🧾','🖨','🔔','🔕']
 				else:
-					rxnEmoji = ['📜','🧾','🔄','🔔','🔕']
+					rxnEmoji = ['📜','🧾','🖨','🔄','🔔','🔕']
 	
 		msg = msgs[-1]
 		
@@ -1838,7 +1870,7 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 			return user.id in CONFIG['whitelist_user_ids'] and reaction.message.id == msg.id and str(reaction.emoji) in rxnEmoji
 		
 		try:
-			reaction, user = await client.wait_for('reaction_add', timeout=60.0 if not repeat_msg_key else REPEAT_MSGS[repeat_msg_key]['freq'], check=check)
+			reaction, user = await client.wait_for('reaction_add', timeout=CONFIG['reaction_wait_timeout'] if not repeat_msg_key else REPEAT_MSGS[repeat_msg_key]['freq'], check=check)
 		except asyncio.TimeoutError:
 			if not repeat_msg_key:
 				await message_clear_reactions(msg, message)
@@ -1857,9 +1889,17 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 				asyncio.create_task(summary(message=message, content=content))
 				return
 			elif str(reaction.emoji) == '🖨':
-				await message_clear_reactions(msg, message, reactions=['🖨'])
-				REPEAT_MSGS[repeat_msg_key]['reprint'] = True
-				return
+				if repeat_msg_key:
+					await message_clear_reactions(msg, message, reactions=['🖨'])
+					REPEAT_MSGS[repeat_msg_key]['reprint'] = True
+					return
+				else:
+					if not isDM(message):
+						try:
+							await msg.delete()
+						except:
+							pass
+					asyncio.create_task(list_transfers(message=message, content=content))
 			elif str(reaction.emoji) == '❎':
 				await message_clear_reactions(msg, message)
 				REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
@@ -1922,7 +1962,7 @@ async def modify(message, content=""):
 			torrents = []
 			if not allOnly:
 
-				if CONFIG['delete_command_messages']:
+				if CONFIG['delete_command_messages'] and not isDM(message):
 					try:
 						await message.delete()
 					except:
@@ -2046,7 +2086,7 @@ async def modify(message, content=""):
 								def check1(reaction, user):
 									return user == message.author and reaction.message.id == msg2.id and str(reaction.emoji) in ['✅','❌']
 								try:
-									reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check1)
+									reaction, user = await client.wait_for('reaction_add', timeout=CONFIG['reaction_wait_timeout'], check=check1)
 								except asyncio.TimeoutError:
 									await message_clear_reactions(msg, message)
 									await message_clear_reactions(msg2, message)
@@ -2090,7 +2130,7 @@ async def modify(message, content=""):
 			return user == message.author and reaction.message.id == msg.id and str(reaction.emoji) in opEmoji
 	
 		try:
-			reaction, user = await client.wait_for('reaction_add', timeout=60.0, check=check)
+			reaction, user = await client.wait_for('reaction_add', timeout=CONFIG['reaction_wait_timeout'], check=check)
 		except asyncio.TimeoutError:
 			await message_clear_reactions(msg, message)
 			return
@@ -2223,8 +2263,15 @@ async def modify_cmd(context, *, content=""):
 		
 
 async def toggle_compact_out(message):
-	global OUTPUT_MODE
-	if OUTPUT_MODE == OutputMode.AUTO:
+	global OUTPUT_MODE, CONFIG
+	if isDM(message):
+		if message.author.id in CONFIG['DM_compact_output_user_ids']:
+			del CONFIG['DM_compact_output_user_ids'][CONFIG['DM_compact_output_user_ids'].index(message.author.id)]
+			await message.channel.send('🖥 DMs switched to desktop output')
+		else:
+			CONFIG['DM_compact_output_user_ids'].append(message.author.id)
+			await message.channel.send('📱 DMs switched to mobile output')
+	elif OUTPUT_MODE == OutputMode.AUTO:
 		if message.author.is_on_mobile():
 			OUTPUT_MODE = OutputMode.DESKTOP
 			await message.channel.send('🖥 Switched to desktop output')
@@ -2238,16 +2285,17 @@ async def toggle_compact_out(message):
 
 @client.command(name='compact', aliases=['c'], pass_context=True)
 async def toggle_compact_out_cmd(context):
-	await toggle_compact_out(context.message)
+	if await CommandPrecheck(context.message):
+		await toggle_compact_out(context.message)
 
 async def LegendGetEmbed(embed_data=None):
 	isCompact = False #COMPACT_OUTPUT
 	joinChar = ',' if isCompact else '\n'
 	if embed_data:
 		embed = discord.Embed.from_dict(embed_data)
-		embed.add_field(name='Symbol legend', value='', inline=False)	
+		embed.add_field(name='Legend', value='', inline=False)	
 	else:
-		embed = discord.Embed(title='Symbol legend', color=0xb51a00)
+		embed = discord.Embed(title='Legend', color=0xb51a00)
 
 	embed.add_field(name="Status 🔍", value=joinChar.join(["🔻—downloading","🌱—seeding","⏸—paused","🔬—verifying","🚧—queued","🏁—finished","↕️—any"]), inline=not isCompact)
 	embed.add_field(name="Metrics 📊", value=joinChar.join(["⬇️—download  rate","⬆️—upload  rate","⏬—total  downloaded","⏫—total  uploaded","⚖️—seed  ratio","⏳—ETA"]), inline=not isCompact)
@@ -2289,7 +2337,7 @@ async def purge_cmd(context):
 
 async def toggle_notifications(message):
 	global CONFIG
-	if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id and CommandPrecheck(message):
+	if isDM(message) and await CommandPrecheck(message):
 		if message.author.id in CONFIG['notification_DM_opt_out_user_ids']:
 			CONFIG['notification_DM_opt_out_user_ids'].remove(message.author.id)
 			message.channel.send('🔕 DM notifications disabled')
@@ -2297,7 +2345,7 @@ async def toggle_notifications(message):
 			CONFIG['notification_DM_opt_out_user_ids'].append(message.author.id)
 			message.channel.send('🔔 DM notifications enabled')
 		generate_json(json_data=CONFIG, path=CONFIG_JSON, overwrite=True)
-	elif CommandPrecheck(message, whitelist=CONFIG['owner_user_ids']):
+	elif await CommandPrecheck(message, whitelist=CONFIG['owner_user_ids']):
 		if CONFIG['notification_enabled_in_channel']:
 			CONFIG['notification_enabled_in_channel'] = False
 			message.channel.send('🔕 In-channel notifications disabled')
@@ -2320,7 +2368,7 @@ async def toggle_dryrun(message):
 
 @client.command(name='dryrun', pass_context=True)
 async def toggle_dryrun_cmd(context):
-	if CommandPrecheck(context.message, whitelist=CONFIG['owner_user_ids']):
+	if await CommandPrecheck(context.message, whitelist=CONFIG['owner_user_ids']):
 		await toggle_dryrun(context.message)
 
 @client.event
@@ -2329,7 +2377,7 @@ async def on_message(message):
 		return
 	if message_has_torrent_file(message):
 		await add(message, content=message.content)
-	if message.author.dm_channel is not None and message.channel.id == message.author.dm_channel.id: # dm only
+	if isDM(message): # dm only
 		if len(message.content) >= len("summary") and "summary" == message.content[:len("summary")]:
 			await summary(message)
 		elif len(message.content) >= len("list") and "list" in message.content[:len("list")]:
@@ -2400,8 +2448,8 @@ async def help(message, content=""):
 			embed.add_field(name="Modify existing transfers", value="*pause, resume, remove, or remove and delete specified transfers*\n*ex.* `{0}modify [LIST_OPTIONS]` or `{0}m [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name="List torrent transfers", value="*list current transfers with sorting, filtering, and search options*\n*ex.* `{0}list [LIST_OPTIONS]` or `{0}l [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name="Print summary of transfers", value="*print summary for specified transfers, with followup options to list subsets of those transfers*\n*ex.* `{0}summary [LIST_OPTIONS]` or `{0}s [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
-			embed.add_field(name='Toggle output style', value='*toggle between desktop (default), mobile (narrow), or smart selection of output style*\n*ex.* `{0}compact` or {0}c'.format(CONFIG['bot_prefix']), inline=False)
-			embed.add_field(name='Toggle notifications', value='*toggle notifications regarding transfer state changes to be checked every {1} seconds (can be changed in config file)*\n*ex.* `{0}notifications` or {0}n'.format(CONFIG['bot_prefix'], CONFIG['notification_freq']), inline=False)
+			embed.add_field(name='Toggle output style', value='*toggle between desktop (default), mobile (narrow), or smart selection of output style*\n*ex.* `{0}compact` or `{0}c`'.format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name='Toggle notifications', value='*toggle notifications regarding transfer state changes to be checked every {1} seconds (can be changed in config file)*\n*ex.* `{0}notifications` or `{0}n`'.format(CONFIG['bot_prefix'], CONFIG['notification_freq']), inline=False)
 			embed.add_field(name='Show legend', value='*prints legend showing the meaning of symbols used in the output of other commands*\n*ex.* `{0}legend`'.format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name='Help - Gives this menu', value='*with optional details of specified command*\n*ex.* `{0}help` or `{0}help COMMAND`'.format(CONFIG['bot_prefix']), inline=False)
 			
