@@ -1772,6 +1772,7 @@ async def repeat_command(command, message, content="", msg_list=[]):
 
 def get_torrent_list_from_command_str(command_str=""):
 	id_list = strListToList(command_str)
+	filter_by, sort_by, filter_regex, tracker_regex, num_results = None, None, None, None, None
 	if not id_list:
 		filter_by, sort_by, filter_regex, tracker_regex, num_results = torGetListOpsFromStr(command_str)
 		if filter_by is not None and filter_by == -1:
