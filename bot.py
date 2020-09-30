@@ -109,6 +109,8 @@ CONFIG = {
 	 },
 	 "repeat_cancel_verbose": True, # if true, print message when auto-update is canceled for a message
 	 "repeat_freq": 2, # number of seconds between updating an auto-update message
+	"repeat_freq_DM_by_user_ids": {}, # use t/repeatfreq to set autoupdate frequency over DM on a per-user basis
+	 "repeat_timeout_DM_by_user_ids": {}, # same but for autoupdate timeout
 	 "repeat_timeout": 3600, # number of seconds before an auto-update message times out
 	 "repeat_timeout_verbose": True, # if true, print message when auto-update message times out
 	 "summary_num_top_ratio": 5 # number of top seed-ratio transfers to show at the bottom of the summary output
@@ -1008,6 +1010,7 @@ async def on_ready():
 		task = asyncio.create_task(loop_notifications())
 		
 def humantime(S, compact_output=(OUTPUT_MODE == OutputMode.MOBILE)): # return humantime for a number of seconds. If time is more than 36 hours, return only the largest rounded time unit (e.g. 2 days or 3 months)
+
 	S = int(S)
 	if S == -2:
 		return '?' if compact_output else 'Unknown'
@@ -1017,11 +1020,17 @@ def humantime(S, compact_output=(OUTPUT_MODE == OutputMode.MOBILE)): # return hu
 		return 'N/A'
 		
 	if compact_output:
+		sStr = "sec"
+		mStr = "min"
+		hStr = "hr"
 		dStr = "dy"
 		wStr = "wk"
 		moStr = "mth"
 		yStr = "yr"
 	else:
+		sStr = "second"
+		mStr = "minute"
+		hStr = "hour"
 		dStr = "day"
 		wStr = "week"
 		moStr = "month"
@@ -1034,20 +1043,19 @@ def humantime(S, compact_output=(OUTPUT_MODE == OutputMode.MOBILE)): # return hu
 	MO = D * 30
 	Y = MO * 12
 	
-	y,s = divmod(S,MO*11.5) # round 11 months to 1 year
-	mo,s = divmod(S,W*3.5)
-	w,s = divmod(S,D*6.5)
-	d,s = divmod(S,D*1.5)
-	for t,td,tStr in zip([y,mo,w,d],[Y,MO,W,D],[yStr,moStr,wStr,dStr]):
+	y = S / (MO*11.5) # round 11 months to 1 year
+	mo = S / (W*3.5)
+	w = S / (D*6.5)
+	d = S / (D*1.5)
+	h = S / (M*55)
+	m = S / (55)
+	for t,td,tStr in zip([y,mo,w,d,h,m],[Y,MO,W,D,H,M],[yStr,moStr,wStr,dStr,hStr,mStr]):
 		if t >= 1:
 			t = round(S/td)
 			out = "{} {}{}".format(t, tStr, '' if t == 1 else 's')
 			return out
 	
-	h,s = divmod(S,H)
-	m,s = divmod(s,M)
-	
-	out = '{:02d}:{:02d}:{:02d}'.format(h, m, s)
+	out = "{} {}{}".format(S, sStr, '' if S == 1 else 's')
 	return out
 
 def humanbytes(B,d = 2):
@@ -1372,15 +1380,15 @@ def torSummary(torrents, repeat_msg_key=None, show_repeat=True, compact_output=(
 		embed.add_field(name="Activity", value='\n'.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[6:9], numInState[6:9])]), inline=not compact_output)
 		embed.add_field(name="Tracker", value='\n'.join(['{} {}'.format(i,j) for i,j in zip(torStateEmoji[9:11], numInState[9:11])]), inline=not compact_output)
 		
-	freq = REPEAT_MSGS[repeat_msg_key]['freq'] if repeat_msg_key else None
+	freq = humantime(REPEAT_MSGS[repeat_msg_key]['freq'],compact_output=False) if repeat_msg_key else None
 	if show_repeat:
-		embed.set_footer(text="{}📜 Legend, 🖨 Reprint{}".format((topRatios + '\n') if numTopRatios > 0 else '', '\nUpdating every {} second{}—❎ to stop'.format(freq,'s' if freq != 1 else '') if repeat_msg_key else ', 🔄 Auto-update'))
+		embed.set_footer(text="{}📜 Legend, 🖨 Reprint{}".format((topRatios + '\n') if numTopRatios > 0 else '', '\nUpdating every {}—❎ to stop'.format(freq) if repeat_msg_key else ', 🔄 Auto-update'))
 	else:
 		embed.set_footer(text="{}📜 Legend, 🖨 Reprint".format((topRatios + '\n') if numTopRatios > 0 else ''))
 	return embed,numInState
 
 
-async def summary(message, content="", repeat_msg_key=None):
+async def summary(message, content="", repeat_msg_key=None, msg=None):
 	global REPEAT_MSGS
 	content=content.strip()
 	if await CommandPrecheck(message):
@@ -1400,35 +1408,41 @@ async def summary(message, content="", repeat_msg_key=None):
 				await message.channel.send(errStr)
 				return
 				
-			summaryData=torSummary(torrents, repeat_msg_key=repeat_msg_key, show_repeat=not isDM(message), compact_output=IsCompactOutput(message))
+			summaryData=torSummary(torrents, repeat_msg_key=repeat_msg_key, show_repeat=repeat_msg_key, compact_output=IsCompactOutput(message))
 			
 			if content != "":
 				summaryData[0].description = "Summary of transfers matching '`{}`'\n".format(content) + summaryData[0].description
 			
-			stateEmojiFilterStartNum = 3 # the first emoji in stateEmoji that corresponds to a list filter
+			stateEmojiFilterStartNum = 4 # the first emoji in stateEmoji that corresponds to a list filter
 			ignoreEmoji = ('✅')
 		
-		if repeat_msg_key:
-			msg = REPEAT_MSGS[repeat_msg_key]['msgs'][0]
-			if REPEAT_MSGS[repeat_msg_key]['reprint'] or (REPEAT_MSGS[repeat_msg_key]['pin_to_bottom'] and message.channel.last_message_id != msg.id):
-				await msg.delete()
-				msg = await message.channel.send(embed=summaryData[0])
-				REPEAT_MSGS[repeat_msg_key]['msgs'] = [msg]
-				REPEAT_MSGS[repeat_msg_key]['reprint'] = False
-			else:
-				await msg.edit(embed=summaryData[0])
-		
-			if message.channel.last_message_id != msg.id and not isDM(message):
-				stateEmoji = ('📜','🖨','❎','↕️') + torStateEmoji
-				stateEmojiFilterStartNum += 1
-			else:
-				stateEmoji = ('📜','❎','↕️') + torStateEmoji
-		else:
+		if repeat_msg_key or msg:
 			if isDM(message):
-				stateEmoji = ('📜','🖨','↕️') + torStateEmoji
+				msg = await message.channel.send(embed=summaryData[0])
+				if repeat_msg_key:
+					stateEmoji = ('📜','🖨','❎','↕️') + torStateEmoji
+				else:
+					stateEmoji = ('📜','🖨','🔄','↕️') + torStateEmoji
 			else:
-				stateEmoji = ('📜','🖨','🔄','↕️') + torStateEmoji
-				stateEmojiFilterStartNum += 1
+				if msg:
+					stateEmoji = ('📜','🖨','🔄','↕️') + torStateEmoji
+					if message.channel.last_message_id != msg.id:
+						await msg.delete()
+						msg = await message.channel.send(embed=summaryData[0])
+					else:
+						await msg.edit(embed=summaryData[0])
+				else:
+					stateEmoji = ('📜','🖨','❎','↕️') + torStateEmoji
+					msg = REPEAT_MSGS[repeat_msg_key]['msgs'][0]
+					if message.channel.last_message_id != msg.id and (REPEAT_MSGS[repeat_msg_key]['reprint'] or REPEAT_MSGS[repeat_msg_key]['pin_to_bottom']):
+						await msg.delete()
+						msg = await message.channel.send(embed=summaryData[0])
+						REPEAT_MSGS[repeat_msg_key]['msgs'] = [msg]
+						REPEAT_MSGS[repeat_msg_key]['reprint'] = False
+					else:
+						await msg.edit(embed=summaryData[0])
+		else:
+			stateEmoji = ('📜','🖨','🔄','↕️') + torStateEmoji
 			msg = await message.channel.send(embed=summaryData[0])
 	
 		# to get actual list of reactions, need to re-fetch the message from the server
@@ -1526,17 +1540,17 @@ async def summary(message, content="", repeat_msg_key=None):
 				asyncio.create_task(repeat_command(summary, message=message, content=content, msg_list=[msg]))
 				return
 			elif str(reaction.emoji) == '🖨':
+				await message_clear_reactions(msg, message, reactions=['🖨'])
 				if repeat_msg_key:
-					await message_clear_reactions(msg, message, reactions=['🖨'])
 					REPEAT_MSGS[repeat_msg_key]['reprint'] = True
 					return
 				else:
-					if not isDM(message):
-						try:
-							await msg.delete()
-						except:
-							pass
-					asyncio.create_task(summary(message=message, content=content))
+					# if not isDM(message):
+					# 	try:
+					# 		await msg.delete()
+					# 	except:
+					# 		pass
+					asyncio.create_task(summary(message=message, content=content, msg=msg))
 		if repeat_msg_key: # a final check to see if the user has cancelled the repeat by checking the count of the cancel reaction
 			cache_msg = await message.channel.fetch_message(msg.id)
 			for r in cache_msg.reactions:
@@ -1552,7 +1566,7 @@ async def summary(message, content="", repeat_msg_key=None):
 								await message_clear_reactions(msg, message)
 								return
 							elif str(r.emoji) == '🖨':
-								await message_clear_reactions(msg, message, reactions=['🖨'])
+								# await message_clear_reactions(msg, message, reactions=['🖨'])
 								REPEAT_MSGS[repeat_msg_key]['reprint'] = True
 								return
 							elif str(r.emoji) in stateEmoji[stateEmojiFilterStartNum-1:]:
@@ -1599,7 +1613,7 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 				eta = 0
 		if compact_output:
 			down = humanbytes(t.progress * 0.01 * t.totalSize, d=0)
-			out = "{}{} ".format(stateEmoji[t.status],errorStrs[t.error] if t.error != 0 else '')
+			out = "{}{}—".format(stateEmoji[t.status],errorStrs[t.error] if t.error != 0 else '')
 			if t.status == 'downloading':
 				out += "{}% {} {}{}/s{}".format(int(t.progress), down, '' if eta <= 0 else '{}@'.format(humantime(eta, compact_output=compact_output)), humanbytes(t.rateDownload, d=0), ' *{}/s* {:.1f}'.format(humanbytes(t.rateUpload, d=0), t.uploadRatio) if t.isStalled else '')
 			elif t.status == 'seeding':
@@ -1612,15 +1626,15 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 				out += "{:.1f}%".format(t.recheckProgress*100.0)
 		else:
 			down = humanbytes(t.progress * 0.01 * t.totalSize)
-			out = "{} {} {} {} ".format(stateEmoji[t.status],errorStrs[t.error],'🚀' if t.rateDownload + t.rateUpload > 0 else '🐢' if t.isStalled else '🐇', '🔐' if t.isPrivate else '🔓')
+			out = "{} {} {} {}—".format(stateEmoji[t.status],errorStrs[t.error],'🚀' if t.rateDownload + t.rateUpload > 0 else '🐢' if t.isStalled else '🐇', '🔐' if t.isPrivate else '🔓')
 			if t.status == 'downloading':
-				out += "{:.1f}% of {} ⏬, {} {}/s ⬇️, *{}/s* ⬆️, *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), '' if eta <= 0 else '\n⏳ {} @ '.format(humantime(eta, compact_output=compact_output)), humanbytes(t.rateDownload), humanbytes(t.rateUpload), t.uploadRatio)
+				out += "⏬ {:.1f}% of {}, ⬇️ {} {}/s, ⬆️ *{}/s*, ⚖️ *{:.2f}*".format(t.progress, humanbytes(t.totalSize, d=1), '' if eta <= 0 else '\n⏳ {} @ '.format(humantime(eta, compact_output=compact_output)), humanbytes(t.rateDownload), humanbytes(t.rateUpload), t.uploadRatio)
 			elif t.status == 'seeding':
-				out += "{} ⏬, *{}/s* ⬆️, *{:.2f}* ⚖️".format(humanbytes(t.totalSize, d=1), humanbytes(t.rateUpload), t.uploadRatio)
+				out += "⏬ {}, ⬆️ *{}/s*, ⚖️ *{:.2f}*".format(humanbytes(t.totalSize, d=1), humanbytes(t.rateUpload), t.uploadRatio)
 			elif t.status == 'stopped':
-				out += "{:.1f}% of {} ⏬, *{:.2f}* ⚖️".format(t.progress, humanbytes(t.totalSize, d=1), t.uploadRatio)
+				out += "⏬ {:.1f}% of {}, ⚖️ *{:.2f}*".format(t.progress, humanbytes(t.totalSize, d=1), t.uploadRatio)
 			elif t.status == 'finished':
-				out += "{} ⏬, {:.2f} ⚖️".format(humanbytes(t.totalSize, d=1), t.uploadRatio)
+				out += "⏬ {}, ⚖️ {:.2f}".format(humanbytes(t.totalSize, d=1), t.uploadRatio)
 			elif t.status == "checking":
 				out += "{:.2f}%".format(t.recheckProgress*100.0)
 		
@@ -1740,8 +1754,8 @@ async def repeat_command(command, message, content="", msg_list=[]):
 		'content':content,
 		'pin_to_bottom':False,
 		'reprint': False,
-		'freq':CONFIG['repeat_freq'],
-		'timeout':CONFIG['repeat_timeout'],
+		'freq':CONFIG['repeat_freq'] if message.author.id not in CONFIG['repeat_freq_DM_by_user_ids'] else CONFIG['repeat_freq_DM_by_user_ids'][message.author.id],
+		'timeout':CONFIG['repeat_timeout'] if message.author.id not in CONFIG['repeat_timeout_DM_by_user_ids'] else CONFIG['repeat_timeout_DM_by_user_ids'][message.author.id],
 		'timeout_verbose':CONFIG['repeat_timeout_verbose'],
 		'cancel_verbose':CONFIG['repeat_cancel_verbose'],
 		'start_time':datetime.datetime.now(),
@@ -1752,7 +1766,7 @@ async def repeat_command(command, message, content="", msg_list=[]):
 		msg = REPEAT_MSGS[msg_key]
 		if msg['do_repeat']:
 			delta = datetime.datetime.now() - msg['start_time']
-			if delta.seconds >= msg['timeout']:
+			if msg['timeout'] > 0 and delta.seconds >= msg['timeout']:
 				if msg['timeout_verbose']:
 					await message.channel.send("❎ Auto-update timed out...")
 				break
@@ -1761,7 +1775,7 @@ async def repeat_command(command, message, content="", msg_list=[]):
 					await msg['command'](message=msg['message'], content=msg['content'], repeat_msg_key=msg_key)
 				except Exception as e:
 					logger.warning("Failed to execute repeat command {}(content={}): {}".format(msg['command'], msg['content'], e))
-					await asyncio.sleep(CONFIG['repeat_freq'])
+					await asyncio.sleep(msg['freq'])
 		else:
 			if msg['cancel_verbose']:
 				await message.channel.send("❎ Auto-update canceled...")
@@ -1789,7 +1803,7 @@ def get_torrent_list_from_command_str(command_str=""):
 	
 	return torrents, ""
 
-async def list_transfers(message, content="", repeat_msg_key=None):
+async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 	global REPEAT_MSGS
 	content=content.strip()
 	if await CommandPrecheck(message):
@@ -1812,41 +1826,61 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 				
 			embeds = torList(torrents, title="{} transfer{} matching '`{}`'".format(len(torrents),'' if len(torrents)==1 else 's',content), compact_output=IsCompactOutput(message))
 		
-			if isDM(message):
-				embeds[-1].set_footer(text="📜 Legend, 🧾 Summarize, 🖨 Reprint")
-			else:
-				embeds[-1].set_footer(text="📜 Legend, 🧾 Summarize, 🖨 Reprint{}".format('\nUpdating every {} second{}—❎ to stop'.format(REPEAT_MSGS[repeat_msg_key]['freq'],'s' if REPEAT_MSGS[repeat_msg_key]['freq'] != 1 else '') if repeat_msg_key else ', 🔄 Auto-update'))
+			embeds[-1].set_footer(text="📜 Legend, 🧾 Summarize, 🖨 Reprint{}".format('\nUpdating every {}—❎ to stop'.format(humantime(REPEAT_MSGS[repeat_msg_key]['freq'],compact_output=False)) if repeat_msg_key else ', 🔄 Auto-update'))
 			
-			if repeat_msg_key:
-				msgs = REPEAT_MSGS[repeat_msg_key]['msgs']
-				if REPEAT_MSGS[repeat_msg_key]['reprint'] or (REPEAT_MSGS[repeat_msg_key]['pin_to_bottom'] and message.channel.last_message_id != msgs[-1].id):
-					for m in msgs:
-						await m.delete()
-					msgs = []
-					REPEAT_MSGS[repeat_msg_key]['reprint'] = False
-				for i,e in enumerate(embeds):
-					if i < len(msgs):
-						await msgs[i].edit(embed=e)
-						cache_msg = await message.channel.fetch_message(msgs[i].id)
-						if i < len(embeds) - 1 and len(cache_msg.reactions) > 0:
-							await message_clear_reactions(cache_msg, message)
+			if repeat_msg_key or msgs:
+				if isDM(message):
+					msgs = [await message.channel.send(embed=e) for e in embeds]
+					if repeat_msg_key:
+						rxnEmoji = ['📜','🧾','🖨','❎','🔔','🔕']
 					else:
-						msgs.append(await message.channel.send(embed=e))
-				if len(msgs) > len(embeds):
-					for i in range(len(msgs) - len(embeds)):
-						await msgs[-1].delete()
-						del msgs[-1]
-				REPEAT_MSGS[repeat_msg_key]['msgs'] = msgs
-				if message.channel.last_message_id != msgs[-1].id:
-					rxnEmoji = ['📜','🧾','🖨','❎','🔔','🔕']
+						rxnEmoji = ['📜','🧾','🖨','🔄','🔔','🔕']
 				else:
-					rxnEmoji = ['📜','🧾','❎','🔔','🔕']
+					if msgs:
+						rxnEmoji = ['📜','🧾','🖨','🔄','🔔','🔕']
+						if message.channel.last_message_id != msgs[-1].id:
+							for m in msgs:
+								await m.delete()
+							msgs = []
+						for i,e in enumerate(embeds):
+							if i < len(msgs):
+								await msgs[i].edit(embed=e)
+								cache_msg = await message.channel.fetch_message(msgs[i].id)
+								if i < len(embeds) - 1 and len(cache_msg.reactions) > 0:
+									await message_clear_reactions(cache_msg, message)
+							else:
+								msgs.append(await message.channel.send(embed=e))
+						if len(msgs) > len(embeds):
+							for i in range(len(msgs) - len(embeds)):
+								await msgs[-1].delete()
+								del msgs[-1]
+					else:
+						rxnEmoji = ['📜','🧾','🖨','❎','🔔','🔕']
+						msgs = REPEAT_MSGS[repeat_msg_key]['msgs']
+						if (REPEAT_MSGS[repeat_msg_key]['reprint'] or REPEAT_MSGS[repeat_msg_key]['pin_to_bottom']) and message.channel.last_message_id != msgs[-1].id:
+							for m in msgs:
+								await m.delete()
+							msgs = []
+							REPEAT_MSGS[repeat_msg_key]['reprint'] = False
+						for i,e in enumerate(embeds):
+							if i < len(msgs):
+								await msgs[i].edit(embed=e)
+								cache_msg = await message.channel.fetch_message(msgs[i].id)
+								if i < len(embeds) - 1 and len(cache_msg.reactions) > 0:
+									await message_clear_reactions(cache_msg, message)
+							else:
+								msgs.append(await message.channel.send(embed=e))
+						if len(msgs) > len(embeds):
+							for i in range(len(msgs) - len(embeds)):
+								await msgs[-1].delete()
+								del msgs[-1]
+						REPEAT_MSGS[repeat_msg_key]['msgs'] = msgs
 			else:
 				msgs = [await message.channel.send(embed=e) for e in embeds]
-				if isDM(message):
-					rxnEmoji = ['📜','🧾','🖨','🔔','🔕']
-				else:
-					rxnEmoji = ['📜','🧾','🖨','🔄','🔔','🔕']
+				# if isDM(message):
+				# 	rxnEmoji = ['📜','🧾','🖨','🔔','🔕']
+				# else:
+				rxnEmoji = ['📜','🧾','🖨','🔄','🔔','🔕']
 	
 		msg = msgs[-1]
 		
@@ -1885,17 +1919,17 @@ async def list_transfers(message, content="", repeat_msg_key=None):
 				asyncio.create_task(summary(message=message, content=content))
 				return
 			elif str(reaction.emoji) == '🖨':
+				await message_clear_reactions(msg, message, reactions=['🖨'])
 				if repeat_msg_key:
-					await message_clear_reactions(msg, message, reactions=['🖨'])
 					REPEAT_MSGS[repeat_msg_key]['reprint'] = True
 					return
 				else:
-					if not isDM(message):
-						try:
-							await msg.delete()
-						except:
-							pass
-					asyncio.create_task(list_transfers(message=message, content=content))
+					# if not isDM(message):
+					# 	try:
+					# 		await msg.delete()
+					# 	except:
+					# 		pass
+					return await list_transfers(message=message, content=content, msgs=msgs)
 			elif str(reaction.emoji) == '❎':
 				await message_clear_reactions(msg, message)
 				REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
@@ -2267,6 +2301,7 @@ async def toggle_compact_out(message):
 		else:
 			CONFIG['DM_compact_output_user_ids'].append(message.author.id)
 			await message.channel.send('📱 DMs switched to mobile output')
+		generate_json(json_data=CONFIG, path=CONFIG_JSON, overwrite=True)
 	elif OUTPUT_MODE == OutputMode.AUTO:
 		if message.author.is_on_mobile():
 			OUTPUT_MODE = OutputMode.DESKTOP
@@ -2331,23 +2366,93 @@ async def purge(message):
 async def purge_cmd(context):
 	await purge(context.message)
 
+async def set_repeat_freq(message, content=CONFIG['repeat_freq']):
+	global CONFIG
+	if isDM(message) and await CommandPrecheck(message):
+		try:
+			if content == "":
+				s = CONFIG['repeat_freq']
+			else:
+				s = int(content)
+				if s <= 0:
+					raise Exception("Integer <= 0 provided for repeat frequency")
+			CONFIG['repeat_freq_DM_by_user_ids'][message.author.id] = s
+			await message.channel.send('🔄 DM repeat frequency set to {}'.format(humantime(s,compact_output=False)))
+			generate_json(json_data=CONFIG, path=CONFIG_JSON, overwrite=True)
+		except:
+			await message.channel.send('‼️ Error setting DM repeat frequency. Must be integer greater than zero (you provided {})'.format(content))
+	elif await CommandPrecheck(message, whitelist=CONFIG['owner_user_ids']):
+		try:
+			if content == "":
+				s = CONFIG['repeat_freq']
+			else:
+				s = int(content)
+				if s <= 0:
+					raise Exception("Integer <= 0 provided for repeat frequency")
+			CONFIG['repeat_freq'] = s
+			await message.channel.send('🔄 In-channel repeat frequency set to {}'.format(humantime(s,compact_output=False)))
+			generate_json(json_data=CONFIG, path=CONFIG_JSON, overwrite=True)
+		except:
+			await message.channel.send('‼️ Error setting in-channel repeat frequency. Must be integer greater than zero (you provided {})'.format(content))
+		
+	return
+	
+@client.command(name='set-repeat-freq', pass_context=True)
+async def set_repeat_freq_cmd(context, content=""):
+	await set_repeat_freq(context.message, content.strip())
+
+async def set_repeat_timeout(message, content=CONFIG['repeat_timeout']):
+	global CONFIG
+	if isDM(message) and await CommandPrecheck(message):
+		try:
+			if content == "":
+				s = CONFIG['repeat_timeout']
+			else:
+				s = int(content)
+				if s < 0:
+					raise Exception("Integer < 0 provided for repeat timeout")
+			CONFIG['repeat_timeout_DM_by_user_ids'][message.author.id] = s
+			await message.channel.send('🔄 DM repeat timeout set to {}'.format(humantime(s,compact_output=False) if s > 0 else 'unlimited'))
+			generate_json(json_data=CONFIG, path=CONFIG_JSON, overwrite=True)
+		except:
+			await message.channel.send('‼️ Error setting DM repeat timeout. Must be integer greater than or equal to zero (you provided {})'.format(content))
+	elif await CommandPrecheck(message, whitelist=CONFIG['owner_user_ids']):
+		try:
+			if content == "":
+				s = CONFIG['repeat_timeout']
+			else:
+				s = int(content)
+				if s < 0:
+					raise Exception("Integer < 0 provided for repeat timeout")
+			CONFIG['repeat_timeout'] = s
+			await message.channel.send('🔄 In-channel repeat timeout set to {}'.format(humantime(s,compact_output=False) if s > 0 else 'unlimited'))
+			generate_json(json_data=CONFIG, path=CONFIG_JSON, overwrite=True)
+		except:
+			await message.channel.send('‼️ Error setting DM repeat timeout. Must be integer greater than or equal to zero (you provided {})'.format(content))
+		
+	return
+
+@client.command(name='set-repeat-timeout', pass_context=True)
+async def set_repeat_timeout_cmd(context, content=""):
+	await set_repeat_timeout(context.message, content.strip())
+
 async def toggle_notifications(message):
 	global CONFIG
 	if isDM(message) and await CommandPrecheck(message):
 		if message.author.id in CONFIG['notification_DM_opt_out_user_ids']:
 			CONFIG['notification_DM_opt_out_user_ids'].remove(message.author.id)
-			message.channel.send('🔕 DM notifications disabled')
+			await message.channel.send('🔕 DM notifications disabled')
 		else:
 			CONFIG['notification_DM_opt_out_user_ids'].append(message.author.id)
-			message.channel.send('🔔 DM notifications enabled')
+			await message.channel.send('🔔 DM notifications enabled')
 		generate_json(json_data=CONFIG, path=CONFIG_JSON, overwrite=True)
 	elif await CommandPrecheck(message, whitelist=CONFIG['owner_user_ids']):
 		if CONFIG['notification_enabled_in_channel']:
 			CONFIG['notification_enabled_in_channel'] = False
-			message.channel.send('🔕 In-channel notifications disabled')
+			await message.channel.send('🔕 In-channel notifications disabled')
 		else:
 			CONFIG['notification_enabled_in_channel'] = True
-			message.channel.send('🔔 In-channel notifications enabled')
+			await message.channel.send('🔔 In-channel notifications enabled')
 		
 	return
 
@@ -2437,6 +2542,13 @@ async def help(message, content="", compact_output=(OUTPUT_MODE == OutputMode.MO
 				embed.add_field(name="By list options", value='`LIST_OPTIONS` is a valid set of options to the `{0}list` command (see `{0}help list` for details)'.format(CONFIG['bot_prefix']), inline=False)
 				embed.add_field(name="Examples", value="`{0}summary`\n`{0}s --filter private`\n`{0}s 23,34,36-42`\n`{0}s --filter downloading ubuntu`".format(CONFIG['bot_prefix']), inline=False)
 				await message.channel.send(embed=embed)
+			elif content in ["config"]:
+				embed = discord.Embed(title="Configuration", color=0xb51a00)
+				embed.set_author(name="Configure bot options", icon_url=CONFIG['logo_url'])
+				embed.add_field(name='Toggle output style', value='*toggle between desktop (default), mobile (narrow), or smart selection of output style*\n*ex.* `{0}compact` or `{0}c`'.format(CONFIG['bot_prefix']), inline=False)
+				embed.add_field(name='Toggle notifications', value='*toggle notifications regarding transfer state changes to be checked every {1} (can be changed in config file)*\n*ex.* `{0}notifications` or `{0}n`'.format(CONFIG['bot_prefix'], humantime(CONFIG['notification_freq'],compact_output=False)), inline=False)
+				embed.add_field(name='Set auto-update message frequency and timeout', value='**Frequency:** *Use* `{0}set-repeat-freq NUM_SECONDS` *to set the repeat frequency of auto-update messages (*`NUM_SECONDS`*must be greater than 0, leave blank to revert to default of {1})*\n**Timeout:** *Use* `{0}set-repeat-timeout NUM_SECONDS` *to set the amount of time an auto-repeat message will repeat until it quits automatically (times out) (*`NUM_SECONDS` *must be greater or equal to 0. Set to 0 for no timeout. Leave blank to revert to default of {2})*'.format(CONFIG['bot_prefix'], humantime(CONFIG['repeat_freq'],compact_output=False),humantime(CONFIG['repeat_timeout'],compact_output=False)), inline=False)
+				await message.channel.send(embed=embed)
 		else:
 			embed = discord.Embed(title='List of commands:', color=0xb51a00)
 			embed.set_author(name='Transmission Bot: Manage torrent file transfers', icon_url=CONFIG['logo_url'])
@@ -2444,8 +2556,9 @@ async def help(message, content="", compact_output=(OUTPUT_MODE == OutputMode.MO
 			embed.add_field(name="Modify existing transfers", value="*pause, resume, remove, or remove and delete specified transfers*\n*ex.* `{0}modify [LIST_OPTIONS]` or `{0}m [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name="List torrent transfers", value="*list current transfers with sorting, filtering, and search options*\n*ex.* `{0}list [LIST_OPTIONS]` or `{0}l [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name="Print summary of transfers", value="*print summary for specified transfers, with followup options to list subsets of those transfers*\n*ex.* `{0}summary [LIST_OPTIONS]` or `{0}s [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
-			embed.add_field(name='Toggle output style', value='*toggle between desktop (default), mobile (narrow), or smart selection of output style*\n*ex.* `{0}compact` or `{0}c`'.format(CONFIG['bot_prefix']), inline=False)
-			embed.add_field(name='Toggle notifications', value='*toggle notifications regarding transfer state changes to be checked every {1} seconds (can be changed in config file)*\n*ex.* `{0}notifications` or `{0}n`'.format(CONFIG['bot_prefix'], CONFIG['notification_freq']), inline=False)
+			embed.add_field(name='Configuration', value='*set frequency and timeout of auto-update messages, toggle notifications, and toggle output display style*\n*See* `{0}help config` *for more information*'.format(CONFIG['bot_prefix']), inline=False)
+			
+			
 			embed.add_field(name='Show legend', value='*prints legend showing the meaning of symbols used in the output of other commands*\n*ex.* `{0}legend`'.format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name='Help - Gives this menu', value='*with optional details of specified command*\n*ex.* `{0}help` or `{0}help COMMAND`'.format(CONFIG['bot_prefix']), inline=False)
 			
