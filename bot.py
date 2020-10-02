@@ -1598,7 +1598,7 @@ def strListToList(strList):
 	return outList
 
 
-def torList(torrents, author_name="Torrent Transfers",title=None,description=None, compact_output=(OUTPUT_MODE == OutputMode.MOBILE)):
+def torList(torrents, author_name="Torrent Transfers",title=None,description=None, footer="📜 Legend", compact_output=(OUTPUT_MODE == OutputMode.MOBILE)):
 	states = ('downloading', 'seeding', 'stopped', 'finished','checking','check pending','download pending','upload pending')
 	stateEmoji = {i:j for i,j in zip(states,['🔻','🌱','⏸','🏁','🔬','🔬','🚧','🚧'])}
 	errorStrs = ['✅','⚠️','🌐','🖥']
@@ -1671,7 +1671,7 @@ def torList(torrents, author_name="Torrent Transfers",title=None,description=Non
 		embeds.append(discord.Embed(title=title, description="No matching transfers found!", color=0xb51a00))
 
 	embeds[-1].set_author(name=author_name, icon_url=CONFIG['logo_url'])
-	embeds[-1].set_footer(text="📜 Legend")
+	embeds[-1].set_footer(text=footer)
 	
 	return embeds
 
@@ -1826,18 +1826,18 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 				
 			embeds = torList(torrents, title="{} transfer{} matching '`{}`'".format(len(torrents),'' if len(torrents)==1 else 's',content), compact_output=IsCompactOutput(message))
 		
-			embeds[-1].set_footer(text="📜 Legend, 🧾 Summarize, 🖨 Reprint{}".format('\nUpdating every {}—❎ to stop'.format(humantime(REPEAT_MSGS[repeat_msg_key]['freq'],compact_output=False)) if repeat_msg_key else ', 🔄 Auto-update'))
+			embeds[-1].set_footer(text="📜 Legend, 🧾 Summarize, 🧰 Modify, 🖨 Reprint{}".format('\nUpdating every {}—❎ to stop'.format(humantime(REPEAT_MSGS[repeat_msg_key]['freq'],compact_output=False)) if repeat_msg_key else ', 🔄 Auto-update'))
 			
 			if repeat_msg_key or msgs:
 				if isDM(message):
 					msgs = [await message.channel.send(embed=e) for e in embeds]
 					if repeat_msg_key:
-						rxnEmoji = ['📜','🧾','🖨','❎','🔔','🔕']
+						rxnEmoji = ['📜','🧾','🧰','🖨','❎','🔔','🔕']
 					else:
-						rxnEmoji = ['📜','🧾','🖨','🔄','🔔','🔕']
+						rxnEmoji = ['📜','🧾','🧰','🖨','🔄','🔔','🔕']
 				else:
 					if msgs:
-						rxnEmoji = ['📜','🧾','🖨','🔄','🔔','🔕']
+						rxnEmoji = ['📜','🧾','🧰','🖨','🔄','🔔','🔕']
 						if message.channel.last_message_id != msgs[-1].id:
 							for m in msgs:
 								await m.delete()
@@ -1855,7 +1855,7 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 								await msgs[-1].delete()
 								del msgs[-1]
 					else:
-						rxnEmoji = ['📜','🧾','🖨','❎','🔔','🔕']
+						rxnEmoji = ['📜','🧾','🧰','🖨','❎','🔔','🔕']
 						msgs = REPEAT_MSGS[repeat_msg_key]['msgs']
 						if (REPEAT_MSGS[repeat_msg_key]['reprint'] or REPEAT_MSGS[repeat_msg_key]['pin_to_bottom']) and message.channel.last_message_id != msgs[-1].id:
 							for m in msgs:
@@ -1878,9 +1878,9 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 			else:
 				msgs = [await message.channel.send(embed=e) for e in embeds]
 				# if isDM(message):
-				# 	rxnEmoji = ['📜','🧾','🖨','🔔','🔕']
+				# 	rxnEmoji = ['📜','🧾','🧰','🖨','🔔','🔕']
 				# else:
-				rxnEmoji = ['📜','🧾','🖨','🔄','🔔','🔕']
+				rxnEmoji = ['📜','🧾','🧰','🖨','🔄','🔔','🔕']
 	
 		msg = msgs[-1]
 		
@@ -1895,6 +1895,73 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 		for e in rxnEmoji:
 			if e not in msgRxns:
 				await msg.add_reaction(e)
+		
+		cache_msg = await message.channel.fetch_message(msg.id)
+		for reaction in cache_msg.reactions:
+			if reaction.count > 1:
+				async for user in reaction.users():
+					if user.id in CONFIG['whitelist_user_ids']:
+						if str(reaction.emoji) == '📜':
+							if repeat_msg_key:
+								await message_clear_reactions(msg, message, reactions=['📜'])
+							else:
+								await message_clear_reactions(msg, message)
+							await legend(message)
+							return
+						elif str(reaction.emoji) == '🧾':
+							await message_clear_reactions(msg, message)
+							asyncio.create_task(summary(message=message, content=content))
+							return
+						elif str(reaction.emoji) == '🧰':
+							if len(torrents) > 0:
+								if not isDM(message) and CONFIG['delete_command_messages']:
+									for msg in msgs:
+										try:
+											msg.delete()
+										except:
+											pass
+								else:
+									await message_clear_reactions(msg, message)
+								asyncio.create_task(modify(message=message, content=','.join([str(t.id) for t in torrents])))
+							return
+						elif str(reaction.emoji) == '🖨':
+							await message_clear_reactions(msg, message, reactions=['🖨'])
+							if repeat_msg_key:
+								REPEAT_MSGS[repeat_msg_key]['reprint'] = True
+								return
+							else:
+								# if not isDM(message):
+								# 	try:
+								# 		await msg.delete()
+								# 	except:
+								# 		pass
+								return await list_transfers(message=message, content=content, msgs=msgs)
+						elif str(reaction.emoji) == '❎':
+							await message_clear_reactions(msg, message)
+							REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
+							return
+						elif str(reaction.emoji) == '🔄':
+							await message_clear_reactions(msg, message, reactions=['🔄'])
+							asyncio.create_task(repeat_command(list_transfers, message=message, content=content, msg_list=msgs))
+							return
+						elif str(reaction.emoji) == '🔔':
+							if len(torrents) > 0:
+								for t in torrents:
+									if t.hashString in TORRENT_NOTIFIED_USERS:
+										TORRENT_NOTIFIED_USERS[t.hashString].append(message.author.id)
+									else:
+										TORRENT_NOTIFIED_USERS[t.hashString] = [message.author.id]
+								embed = discord.Embed(title="🔔 Notifications enabled for:", description=",\n".join(["{}{}".format("" if len(torrents) == 1 else "**{}.**".format(i+1),j) for i,j in enumerate([t.name for t in torrents])]))
+								await user.send(embed=embed)
+						elif str(reaction.emoji) == '🔕':
+							if len(torrents) > 0:
+								for t in torrents:
+									if t.hashString in TORRENT_OPTOUT_USERS:
+										TORRENT_OPTOUT_USERS[t.hashString].append(message.author.id)
+									else:
+										TORRENT_OPTOUT_USERS[t.hashString] = [message.author.id]
+								embed = discord.Embed(title="🔕 Notifications disabled for:", description=",\n".join(["{}{}".format("" if len(torrents) == 1 else "**{}.**".format(i+1),j) for i,j in enumerate([t.name for t in torrents])]))
+								await user.send(embed=embed)
 	
 		def check(reaction, user):
 			return user.id in CONFIG['whitelist_user_ids'] and reaction.message.id == msg.id and str(reaction.emoji) in rxnEmoji
@@ -1917,6 +1984,18 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 			elif str(reaction.emoji) == '🧾':
 				await message_clear_reactions(msg, message)
 				asyncio.create_task(summary(message=message, content=content))
+				return
+			elif str(reaction.emoji) == '🧰':
+				if len(torrents) > 0:
+					if not isDM(message) and CONFIG['delete_command_messages']:
+						for msg in msgs:
+							try:
+								msg.delete()
+							except:
+								pass
+					else:
+						await message_clear_reactions(msg, message)
+					asyncio.create_task(modify(message=message, content=','.join([str(t.id) for t in torrents])))
 				return
 			elif str(reaction.emoji) == '🖨':
 				await message_clear_reactions(msg, message, reactions=['🖨'])
@@ -1966,6 +2045,18 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 							if str(r.emoji) == '🖨':
 								REPEAT_MSGS[repeat_msg_key]['reprint'] = True
 								await message_clear_reactions(msg, message, reactions=['🖨'])
+							elif str(r.emoji) == '🧰':
+								if len(torrents) > 0:
+									if not isDM(message) and CONFIG['delete_command_messages']:
+										for msg in msgs:
+											try:
+												msg.delete()
+											except:
+												pass
+									else:
+										await message_clear_reactions(msg, message)
+									asyncio.create_task(modify(message=message, content=','.join([t.id for t in torrents])))
+								return
 							elif str(r.emoji) == '📜':
 								await message_clear_reactions(msg, message, reactions=['📜'])
 								await legend(message)
@@ -2009,7 +2100,7 @@ async def modify(message, content=""):
 					opNames = ["pause","resume","remove","remove and delete","verify"]
 					opEmoji = ['⏸','▶️','❌','🗑','🔬']
 					opStr = "⏸pause ▶️resume ❌remove 🗑remove  and  delete 🔬verify"
-					embeds = torList(torrents,author_name="Click a reaction to choose modification".format(len(torrents), '' if len(torrents)==1 else 's'),title="{} transfer{} matching '`{}`' will be modified".format(len(torrents), '' if len(torrents)==1 else 's', content), compact_output=IsCompactOutput(message))
+					embeds = torList(torrents,author_name="Click a reaction to choose modification".format(len(torrents), '' if len(torrents)==1 else 's'),title="{} transfer{} matching '`{}`' will be modified".format(len(torrents), '' if len(torrents)==1 else 's', content), footer=opStr + "\n📜 Legend, 🚫 Cancel", compact_output=IsCompactOutput(message))
 				else:
 					embed=discord.Embed(title="Modify transfers",color=0xb51a00)
 					embed.set_author(name="No matching transfers found!", icon_url=CONFIG['logo_url'])
@@ -2021,14 +2112,14 @@ async def modify(message, content=""):
 				opStr = "⏸ pause or ▶️ resume all"
 				embed=discord.Embed(title="React to choose modification",color=0xb51a00)
 				embed.set_author(name="All transfers will be affected!", icon_url=CONFIG['logo_url'])
-				embed.set_footer(text=opStr)
+				embed.set_footer(text=opStr + "\n📜 Legend, 🚫 Cancel")
 				embeds = [embed]
 			msgs = [await message.channel.send(embed=e) for e in embeds]
 	
 		if not allOnly and len(torrents) == 0:
 			return
 	
-		opEmoji.append('📜')
+		opEmoji += ['🚫','📜']
 	
 		msg = msgs[-1]
 	
@@ -2043,6 +2134,10 @@ async def modify(message, content=""):
 						if str(reaction.emoji) == opEmoji[-1]:
 							await message_clear_reactions(msg, message)
 							await legend(message)
+						elif str(reaction.emoji) == '🚫':
+							await message_clear_reactions(msg, message)
+							await message.channel.send("❌ Cancelled!")
+							return
 						elif str(reaction.emoji) in opEmoji[:-1]:
 							cmds = {i:j for i,j in zip(opEmoji,ops)}
 							cmdNames = {i:j for i,j in zip(opEmoji,opNames)}
@@ -2168,6 +2263,10 @@ async def modify(message, content=""):
 			if str(reaction.emoji) == opEmoji[-1]:
 				await message_clear_reactions(msg, message)
 				await legend(message)
+			elif str(reaction.emoji) == '🚫':
+				await message_clear_reactions(msg, message)
+				await message.channel.send("❌ Cancelled!")
+				return
 			elif str(reaction.emoji) in opEmoji[:-1]:
 				cmds = {i:j for i,j in zip(opEmoji,ops)}
 				cmdNames = {i:j for i,j in zip(opEmoji,opNames)}
