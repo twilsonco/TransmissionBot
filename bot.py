@@ -55,6 +55,7 @@ CONFIG = {
 	 "delete_command_message_private_torrent": True, # deletes command message if that message contains one or more torrent files that use a private tracker
 	 "private_transfers_protected": True, # prevent transfers on private trackers from being removed
 	 "private_transfer_protection_added_user_override": True, # if true, the user that added a private transfer can remove it regardless of 'private_transfers_protected'
+	"private_transfer_protection_bot_owner_override": False, # similar to 'private_transfer_protection_added_user_override', but allows bot owners to delete private transfers
 	 "whitelist_user_can_remove": True, # if true, whitelisted users can remove any transfer
 	 "whitelist_user_can_delete": True, # if true, whitelisted users can remove and delete any transfer
 	 "whitelist_added_user_remove_delete_override": True, # if true, override both 'whitelist_user_can_remove' and 'whitelist_user_can_delete' allowing whitelisted users to remove and delete transfers they added
@@ -812,7 +813,7 @@ def prepare_notifications(changedTransfers, states=CONFIG['notification_states']
 						torrents[h] = t
 					
 					nameStr = d['name'].format(n, '' if n == 1 else 's')
-					vals = ["{}{}".format("**{}.**".format(i+1) if n > 1 else '', t['name'], "\n (error: *{}*)".format(t['errorString']) if t['errorString'] != "" else "") for i,t in enumerate(d['data'].values())]
+					vals = ["{}{}".format("{}.".format(i+1) if n > 1 else '', t['name'], "\n (error: *{}*)".format(t['errorString']) if t['errorString'] != "" else "") for i,t in enumerate(d['data'].values())]
 					valStr = ',\n'.join(vals)
 					
 					if len(embeds[-1]) + len(nameStr) + len(valStr) >= 6000:
@@ -1418,11 +1419,12 @@ async def summary(message, content="", repeat_msg_key=None, msg=None):
 		
 		if repeat_msg_key or msg:
 			if isDM(message):
-				msg = await message.channel.send(embed=summaryData[0])
 				if repeat_msg_key:
 					stateEmoji = ('📜','🖨','❎','↕️') + torStateEmoji
+					summaryData[0].timestamp = datetime.datetime.now(tz=pytz.timezone('America/Denver'))
 				else:
 					stateEmoji = ('📜','🖨','🔄','↕️') + torStateEmoji
+				msg = await message.channel.send(embed=summaryData[0])
 			else:
 				if msg:
 					stateEmoji = ('📜','🖨','🔄','↕️') + torStateEmoji
@@ -1433,6 +1435,7 @@ async def summary(message, content="", repeat_msg_key=None, msg=None):
 						await msg.edit(embed=summaryData[0])
 				else:
 					stateEmoji = ('📜','🖨','❎','↕️') + torStateEmoji
+					summaryData[0].timestamp = datetime.datetime.now(tz=pytz.timezone('America/Denver'))
 					msg = REPEAT_MSGS[repeat_msg_key]['msgs'][0]
 					if message.channel.last_message_id != msg.id and (REPEAT_MSGS[repeat_msg_key]['reprint'] or REPEAT_MSGS[repeat_msg_key]['pin_to_bottom']):
 						await msg.delete()
@@ -1830,11 +1833,12 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 			
 			if repeat_msg_key or msgs:
 				if isDM(message):
-					msgs = [await message.channel.send(embed=e) for e in embeds]
 					if repeat_msg_key:
 						rxnEmoji = ['📜','🧾','🧰','🖨','❎','🔔','🔕']
+						embeds[-1].timestamp = datetime.datetime.now(tz=pytz.timezone('America/Denver'))
 					else:
 						rxnEmoji = ['📜','🧾','🧰','🖨','🔄','🔔','🔕']
+					msgs = [await message.channel.send(embed=e) for e in embeds]
 				else:
 					if msgs:
 						rxnEmoji = ['📜','🧾','🧰','🖨','🔄','🔔','🔕']
@@ -1856,6 +1860,7 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 								del msgs[-1]
 					else:
 						rxnEmoji = ['📜','🧾','🧰','🖨','❎','🔔','🔕']
+						embeds[-1].timestamp = datetime.datetime.now(tz=pytz.timezone('America/Denver'))
 						msgs = REPEAT_MSGS[repeat_msg_key]['msgs']
 						if (REPEAT_MSGS[repeat_msg_key]['reprint'] or REPEAT_MSGS[repeat_msg_key]['pin_to_bottom']) and message.channel.last_message_id != msgs[-1].id:
 							for m in msgs:
@@ -2148,18 +2153,31 @@ async def modify(message, content=""):
 							msg2 = None
 							if "remove" in cmds[str(reaction.emoji)]:
 								footerPrepend = ""
-								if CONFIG['private_transfers_protected']:
+								if CONFIG['private_transfers_protected'] and (not CONFIG['private_transfer_protection_bot_owner_override'] or message.author.id not in CONFIG['owner_user_ids']):
 									removeTorrents = [t for t in torrents if not t.isPrivate]
 									if len(removeTorrents) != len(torrents):
 										if CONFIG['private_transfer_protection_added_user_override']:
 											oldTorrents = load_json(path=TORRENT_JSON)
 											removeTorrents = [t for t in torrents if not t.isPrivate or ((t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id))]
 											if len(removeTorrents) != len(torrents):
-												torrents = removeTorrents
-												footerPrepend = "(I'm not allowed to remove private transfers unless they were added by you, but those you added and the public ones)\n"
+												if len(removeTorrents) == 0:
+													await message.channel.send("🚫 I'm not allowed to remove private transfers unless they were added by you. If this isn't right, talk to an admin.")
+													await message_clear_reactions(msg, message)
+													return
+												else:
+													torrents = removeTorrents
+													footerPrepend = "(I'm not allowed to remove private transfers unless they were added by you, so this will only apply to those you added and the public ones)\n"
 										else:
-											torrents = removeTorrents
-											footerPrepend = "(I'm not allowed to remove private transfers, but I'll do the public ones)\n"
+											if len(removeTorrents) == 0:
+												await message.channel.send("🚫 I'm not allowed to remove private transfers. If this isn't right, talk to an admin.")
+												await message_clear_reactions(msg, message)
+												return
+											else:
+												torrents = removeTorrents
+												if CONFIG['private_transfer_protection_bot_owner_override']:
+													footerPrepend = "(Only bot owners can remove private transfers, but I'll do the public ones)\n"
+												else:
+													footerPrepend = "(I'm not allowed to remove private transfers, but I'll do the public ones)\n"
 								
 								if "delete" in cmds[str(reaction.emoji)] and not CONFIG['whitelist_user_can_delete'] and message.author.id not in CONFIG['owner_user_ids']:
 									# user may not be allowed to perform this operation. Check if they added any transfers, and whether the added_user_override is enabled.
@@ -2211,7 +2229,7 @@ async def modify(message, content=""):
 								def check1(reaction, user):
 									return user == message.author and reaction.message.id == msg2.id and str(reaction.emoji) in ['✅','❌']
 								try:
-									reaction, user = await client.wait_for('reaction_add', timeout=CONFIG['reaction_wait_timeout'], check=check1)
+									reaction, user = await client.wait_for('reaction_add', timeout=60, check=check1)
 								except asyncio.TimeoutError:
 									await message_clear_reactions(msg, message)
 									await message_clear_reactions(msg2, message)
@@ -2277,20 +2295,31 @@ async def modify(message, content=""):
 				doContinue = True
 				if "remove" in cmds[str(reaction.emoji)]:
 					footerPrepend = ""
-					if CONFIG['private_transfers_protected']:
+					if CONFIG['private_transfers_protected'] and (not CONFIG['private_transfer_protection_bot_owner_override'] or message.author.id not in CONFIG['owner_user_ids']):
 						removeTorrents = [t for t in torrents if not t.isPrivate]
-						if CONFIG['private_transfers_protected']:
-							removeTorrents = [t for t in torrents if not t.isPrivate]
-							if len(removeTorrents) != len(torrents):
-								if CONFIG['private_transfer_protection_added_user_override']:
-									oldTorrents = load_json(path=TORRENT_JSON)
-									removeTorrents = [t for t in torrents if not t.isPrivate or ((t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id))]
-									if len(removeTorrents) != len(torrents):
+						if len(removeTorrents) != len(torrents):
+							if CONFIG['private_transfer_protection_added_user_override']:
+								oldTorrents = load_json(path=TORRENT_JSON)
+								removeTorrents = [t for t in torrents if not t.isPrivate or ((t.hashString in oldTorrents and oldTorrents[t.hashString]['added_user'] == message.author.id) or (t.hashString in TORRENT_ADDED_USERS and TORRENT_ADDED_USERS[t.hashString] == message.author.id))]
+								if len(removeTorrents) != len(torrents):
+									if len(removeTorrents) == 0:
+										await message.channel.send("🚫 I'm not allowed to remove private transfers unless they were added by you. If this isn't right, talk to an admin.")
+										await message_clear_reactions(msg, message)
+										return
+									else:
 										torrents = removeTorrents
-										footerPrepend = "(I'm not allowed to remove private transfers unless they were added by you, but those you added and the public ones)\n"
+										footerPrepend = "(I'm not allowed to remove private transfers unless they were added by you, so this will only apply to those you added and the public ones)\n"
+							else:
+								if len(removeTorrents) == 0:
+									await message.channel.send("🚫 I'm not allowed to remove private transfers. If this isn't right, talk to an admin.")
+									await message_clear_reactions(msg, message)
+									return
 								else:
 									torrents = removeTorrents
-									footerPrepend = "(I'm not allowed to remove private transfers, but I'll do the public ones)\n"
+									if CONFIG['private_transfer_protection_bot_owner_override']:
+										footerPrepend = "(Only bot owners can remove private transfers, but I'll do the public ones)\n"
+									else:
+										footerPrepend = "(I'm not allowed to remove private transfers, but I'll do the public ones)\n"
 					if "delete" in cmds[str(reaction.emoji)] and not CONFIG['whitelist_user_can_delete'] and message.author.id not in CONFIG['owner_user_ids']:
 						# user may not be allowed to perform this operation. Check if they added any transfers, and whether the added_user_override is enabled.
 						if CONFIG['whitelist_added_user_remove_delete_override']:
