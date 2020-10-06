@@ -1417,14 +1417,17 @@ async def summary(message, content="", repeat_msg_key=None, msg=None):
 			stateEmojiFilterStartNum = 4 # the first emoji in stateEmoji that corresponds to a list filter
 			ignoreEmoji = ('✅')
 		
+		formatEmoji = '💻' if IsCompactOutput(message) else '📱'
+		
 		if repeat_msg_key or msg:
 			if isDM(message):
 				if repeat_msg_key:
-					stateEmoji = ('📜','🖨','❎','↕️') + torStateEmoji
+					stateEmoji = ('📜',formatEmoji,'🖨','❎','↕️') + torStateEmoji
 					summaryData[0].timestamp = datetime.datetime.now(tz=pytz.timezone('America/Denver'))
 				else:
-					stateEmoji = ('📜','🖨','🔄','↕️') + torStateEmoji
+					stateEmoji = ('📜',formatEmoji,'🖨','🔄','↕️') + torStateEmoji
 				msg = await message.channel.send(embed=summaryData[0])
+				stateEmojiFilterStartNum += 1
 			else:
 				if msg:
 					stateEmoji = ('📜','🖨','🔄','↕️') + torStateEmoji
@@ -1445,7 +1448,11 @@ async def summary(message, content="", repeat_msg_key=None, msg=None):
 					else:
 						await msg.edit(embed=summaryData[0])
 		else:
-			stateEmoji = ('📜','🖨','🔄','↕️') + torStateEmoji
+			if isDM(message):
+				stateEmoji = ('📜',formatEmoji,'🖨','🔄','↕️') + torStateEmoji
+				stateEmojiFilterStartNum += 1
+			else:
+				stateEmoji = ('📜','🖨','🔄','↕️') + torStateEmoji
 			msg = await message.channel.send(embed=summaryData[0])
 	
 		# to get actual list of reactions, need to re-fetch the message from the server
@@ -1491,6 +1498,10 @@ async def summary(message, content="", repeat_msg_key=None, msg=None):
 								await message_clear_reactions(msg, message)
 							await legend(message)
 							return
+						elif str(r.emoji) == formatEmoji:
+							await toggle_compact_out(message=message)
+							asyncio.create_task(summary(message=message, content=content, msg=msg))
+							return
 						elif str(r.emoji) == '❎':
 							await message_clear_reactions(msg, message)
 							REPEAT_MSGS[repeat_msg_key]['do_repeat'] = False
@@ -1533,6 +1544,10 @@ async def summary(message, content="", repeat_msg_key=None, msg=None):
 				else:
 					await message_clear_reactions(msg, message)
 				await legend(message)
+				return
+			elif str(reaction.emoji) == formatEmoji:
+				await toggle_compact_out(message=message)
+				asyncio.create_task(summary(message=message, content=content, msg=msg))
 				return
 			elif str(reaction.emoji) == '❎':
 				await message_clear_reactions(msg, message)
@@ -1831,13 +1846,15 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 		
 			embeds[-1].set_footer(text="📜 Legend, 🧾 Summarize, 🧰 Modify, 🖨 Reprint{}".format('\nUpdating every {}—❎ to stop'.format(humantime(REPEAT_MSGS[repeat_msg_key]['freq'],compact_output=False)) if repeat_msg_key else ', 🔄 Auto-update'))
 			
+			formatEmoji = '💻' if IsCompactOutput(message) else '📱'
+			
 			if repeat_msg_key or msgs:
 				if isDM(message):
 					if repeat_msg_key:
-						rxnEmoji = ['📜','🧾','🧰','🖨','❎','🔔','🔕']
+						rxnEmoji = ['📜','🧾','🧰',formatEmoji,'🖨','❎','🔔','🔕']
 						embeds[-1].timestamp = datetime.datetime.now(tz=pytz.timezone('America/Denver'))
 					else:
-						rxnEmoji = ['📜','🧾','🧰','🖨','🔄','🔔','🔕']
+						rxnEmoji = ['📜','🧾','🧰',formatEmoji,'🖨','🔄','🔔','🔕']
 					msgs = [await message.channel.send(embed=e) for e in embeds]
 				else:
 					if msgs:
@@ -1882,10 +1899,10 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 						REPEAT_MSGS[repeat_msg_key]['msgs'] = msgs
 			else:
 				msgs = [await message.channel.send(embed=e) for e in embeds]
-				# if isDM(message):
-				# 	rxnEmoji = ['📜','🧾','🧰','🖨','🔔','🔕']
-				# else:
-				rxnEmoji = ['📜','🧾','🧰','🖨','🔄','🔔','🔕']
+				if isDM(message):
+					rxnEmoji = ['📜','🧾','🧰',formatEmoji,'🖨','🔄','🔔','🔕']
+				else:
+					rxnEmoji = ['📜','🧾','🧰','🖨','🔄','🔔','🔕']
 	
 		msg = msgs[-1]
 		
@@ -1928,6 +1945,10 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 								else:
 									await message_clear_reactions(msg, message)
 								asyncio.create_task(modify(message=message, content=','.join([str(t.id) for t in torrents])))
+							return
+						elif str(reaction.emoji) == formatEmoji:
+							await toggle_compact_out(message=message)
+							return await list_transfers(message=message, content=content, msgs=msgs)
 							return
 						elif str(reaction.emoji) == '🖨':
 							await message_clear_reactions(msg, message, reactions=['🖨'])
@@ -2002,6 +2023,10 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 						await message_clear_reactions(msg, message)
 					asyncio.create_task(modify(message=message, content=','.join([str(t.id) for t in torrents])))
 				return
+			elif str(reaction.emoji) == formatEmoji:
+				await toggle_compact_out(message=message)
+				return await list_transfers(message=message, content=content, msgs=msgs)
+				return
 			elif str(reaction.emoji) == '🖨':
 				await message_clear_reactions(msg, message, reactions=['🖨'])
 				if repeat_msg_key:
@@ -2050,6 +2075,10 @@ async def list_transfers(message, content="", repeat_msg_key=None, msgs=None):
 							if str(r.emoji) == '🖨':
 								REPEAT_MSGS[repeat_msg_key]['reprint'] = True
 								await message_clear_reactions(msg, message, reactions=['🖨'])
+							elif str(r.emoji) == formatEmoji:
+								await toggle_compact_out(message=message)
+								return await list_transfers(message=message, content=content, msgs=msgs)
+								return
 							elif str(r.emoji) == '🧰':
 								if len(torrents) > 0:
 									if not isDM(message) and CONFIG['delete_command_messages']:
@@ -2123,8 +2152,12 @@ async def modify(message, content=""):
 	
 		if not allOnly and len(torrents) == 0:
 			return
-	
+			
+		formatEmoji = '💻' if IsCompactOutput(message) else '📱'
+
 		opEmoji += ['🚫','📜']
+		if isDM(message):
+			opEmoji += [formatEmoji]
 	
 		msg = msgs[-1]
 	
@@ -2136,9 +2169,13 @@ async def modify(message, content=""):
 			if reaction.count > 1:
 				async for user in reaction.users():
 					if user.id == message.author.id:
-						if str(reaction.emoji) == opEmoji[-1]:
+						if str(reaction.emoji) == '📜':
 							await message_clear_reactions(msg, message)
 							await legend(message)
+						elif str(reaction.emoji) == formatEmoji:
+							await toggle_compact_out(message=message)
+							return await modify(message=message, content=content)
+							return
 						elif str(reaction.emoji) == '🚫':
 							await message_clear_reactions(msg, message)
 							await message.channel.send("❌ Cancelled!")
@@ -2273,14 +2310,18 @@ async def modify(message, content=""):
 			return user == message.author and reaction.message.id == msg.id and str(reaction.emoji) in opEmoji
 	
 		try:
-			reaction, user = await client.wait_for('reaction_add', timeout=CONFIG['reaction_wait_timeout'], check=check)
+			reaction, user = await client.wait_for('reaction_add', timeout=60, check=check)
 		except asyncio.TimeoutError:
 			await message_clear_reactions(msg, message)
 			return
 		else:
-			if str(reaction.emoji) == opEmoji[-1]:
+			if str(reaction.emoji) == '📜':
 				await message_clear_reactions(msg, message)
 				await legend(message)
+			elif str(reaction.emoji) == formatEmoji:
+				await toggle_compact_out(message=message)
+				return await modify(message=message, content=content)
+				return
 			elif str(reaction.emoji) == '🚫':
 				await message_clear_reactions(msg, message)
 				await message.channel.send("❌ Cancelled!")
