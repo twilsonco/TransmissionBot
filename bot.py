@@ -908,7 +908,7 @@ async def check_notification_reactions(message, is_text_channel, torrents, start
 	return await check_notification_reactions(message, is_text_channel, torrents, starttime=starttime)
 
 async def run_notifications():
-	if CONFIG['notification_enabled'] and CONFIG['notification_channel_id'] > 0:
+	if CONFIG['notification_enabled']:
 		# get all changes
 		logger.debug("Running notification check")
 		changedTransfers = check_for_transfer_changes()
@@ -916,7 +916,7 @@ async def run_notifications():
 		if nTotal > 0:
 			addReactions = (sum([len(d['data']) for k,d in changedTransfers.items() if k != "removed"]) > 0)
 			# first in_channel notifications
-			if CONFIG['notification_enabled_in_channel']:
+			if CONFIG['notification_enabled_in_channel'] and CONFIG['notification_channel_id'] > 0 and len(str(CONFIG['notification_channel_id'])) == 18:
 				embeds, n, torrents = prepare_notifications(changedTransfers, CONFIG['notification_states']['in_channel'])
 				logger.debug("in_channel notifications: {}".format(n))
 					# now post notifications
