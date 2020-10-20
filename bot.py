@@ -18,6 +18,7 @@ from platform import python_version
 import os
 import sys
 from os.path import expanduser, join, exists, isdir, isfile
+import shutil
 import re
 import datetime
 import pytz
@@ -25,6 +26,7 @@ import platform
 import secrets
 import transmissionrpc
 import logging
+from logging import handlers
 import base64
 import random
 from enum import Enum
@@ -39,91 +41,90 @@ Bot configuration:
 2. run the bot, which will make a config.json file containing this configuration info
 3. comment or remove the configuration below, as the config.json will be used instead (this also makes updating to new versions easier)
 """
-CONFIG = {
-	 "tsclient": { # information for transmission remote web gui
-		 'host': "192.168.0.2",
-		 'port': 9091,
-		 'user': "USERNAME",
-		 'password': "PASSWORD"
-	 },
-	 "whitelist_user_ids": [], # discord users allowed to use bot
-	 "blacklist_user_ids": [], # discord users disallowed to use bot
-	 "owner_user_ids": [], # discord users given full access
-	"DM_compact_output_user_ids": [], # DO NOT EDIT MANUALLY! if a user id is in this list, that user will get compact output via DM (changed by t/compact command)
-	"reaction_wait_timeout": 7200, # seconds the bot should wait for a reaction to be clicked by a user
-	  "delete_command_messages": False, # delete command messages from users
-	 "delete_command_message_private_torrent": True, # deletes command message if that message contains one or more torrent files that use a private tracker
-	 "private_transfers_protected": True, # prevent transfers on private trackers from being removed
-	 "private_transfer_protection_added_user_override": True, # if true, the user that added a private transfer can remove it regardless of 'private_transfers_protected'
-	"private_transfer_protection_bot_owner_override": False, # similar to 'private_transfer_protection_added_user_override', but allows bot owners to delete private transfers
-	 "whitelist_user_can_remove": True, # if true, whitelisted users can remove any transfer
-	 "whitelist_user_can_delete": True, # if true, whitelisted users can remove and delete any transfer
-	 "whitelist_added_user_remove_delete_override": True, # if true, override both 'whitelist_user_can_remove' and 'whitelist_user_can_delete' allowing whitelisted users to remove and delete transfers they added
-	 "bot_prefix": "t/", # bot command prefix
-	 "bot_token": "BOT_TOKEN", # bot token
-	 "dryrun": False, # if true, no changes are actually applied to transfers
-	 "listen_channel_ids": [], # channels in which to listen for commands
-	 "listen_all_channels": False, # if true, listen for commands in all text channels
-	 "listen_DMs": True, # listen for commands via DM to the bot
-	 "logo_url": "https://iyanovich.files.wordpress.com/2009/04/transmission-logo.png", # URL to logo that appears in some output
-	 "notification_channel_id": 'NOTIFICATION_CHANNEL_ID', # channel to which in-channel notificatations will be posted
-	 "notification_enabled": True, # if False, in-channel and DM notifications are disabled
-	 "notification_enabled_in_channel": True, # if False, in-channel notifications are disabled, but DM notifications will still work
-	 "notification_freq": 300, # number of seconds between checking transfers and posting notifications
-	 "notification_reaction_check_factor": 2, # determines how long DM notification subscription reactions will be monitored on in-channel and DM notifications; they're monitored for (notification_reaction_check_factor X notification_freq) seconds
-	 "notification_DM_opt_out_user_ids": [], # DON'T MODIFY (used by bot to record users that have opted out of receiving DM notifications)
-	 "notification_states":{ # determines the types of transfer state changes that are reported in notifications...
-		 "in_channel": # ...for in-channel notifications, (this is the full list of potential state changes)
-		 [
-			 "new",
-			 "removed",
-			 "error",
-			 "downloaded",
-			 "stalled",
-			 "unstalled",
-			 "finished",
-			 "stopped",
-			 "started"
-		 ],
-		 "notified_users": # ...DM notifications for users that opted in to DM notifications for transfer(s)
-		 [
-			 "removed",
-			 "error",
-			 "downloaded",
-			 "stalled",
-			 "unstalled",
-			 "finished",
-			 "stopped",
-			 "started"
-		 ],
-		 "added_user":# ...and DM notifications to users that added transfers
-		 [
-			 "removed",
-			 "error",
-			 "downloaded",
-			 "stalled",
-			 "unstalled",
-			 "finished",
-			 "stopped",
-			 "started"
-		 ]
-	 },
-	 "repeat_cancel_verbose": True, # if true, print message when auto-update is canceled for a message
-	 "repeat_freq": 2, # number of seconds between updating an auto-update message
-	"repeat_freq_DM_by_user_ids": {}, # use t/repeatfreq to set autoupdate frequency over DM on a per-user basis
-	 "repeat_timeout_DM_by_user_ids": {}, # same but for autoupdate timeout
-	 "repeat_timeout": 3600, # number of seconds before an auto-update message times out
-	 "repeat_timeout_verbose": True, # if true, print message when auto-update message times out
-	 "summary_num_top_ratio": 5 # number of top seed-ratio transfers to show at the bottom of the summary output
-}
+# CONFIG = {
+#	 "tsclient": { # information for transmission remote web gui
+#		 'host': "192.168.0.2",
+#		 'port': 9091,
+#		 'user': "USERNAME",
+#		 'password': "PASSWORD"
+#	 },
+#	 "whitelist_user_ids": [], # discord users allowed to use bot
+#	 "blacklist_user_ids": [], # discord users disallowed to use bot
+#	 "owner_user_ids": [], # discord users given full access
+# 	"DM_compact_output_user_ids": [], # DO NOT EDIT MANUALLY! if a user id is in this list, that user will get compact output via DM (changed by t/compact command)
+# 	"reaction_wait_timeout": 7200, # seconds the bot should wait for a reaction to be clicked by a user
+#	  "delete_command_messages": False, # delete command messages from users
+#	 "delete_command_message_private_torrent": True, # deletes command message if that message contains one or more torrent files that use a private tracker
+#	 "private_transfers_protected": True, # prevent transfers on private trackers from being removed
+#	 "private_transfer_protection_added_user_override": True, # if true, the user that added a private transfer can remove it regardless of 'private_transfers_protected'
+# 	"private_transfer_protection_bot_owner_override": False, # similar to 'private_transfer_protection_added_user_override', but allows bot owners to delete private transfers
+#	 "whitelist_user_can_remove": True, # if true, whitelisted users can remove any transfer
+#	 "whitelist_user_can_delete": True, # if true, whitelisted users can remove and delete any transfer
+#	 "whitelist_added_user_remove_delete_override": True, # if true, override both 'whitelist_user_can_remove' and 'whitelist_user_can_delete' allowing whitelisted users to remove and delete transfers they added
+#	 "bot_prefix": "t/", # bot command prefix
+#	 "bot_token": "BOT_TOKEN", # bot token
+#	 "dryrun": False, # if true, no changes are actually applied to transfers
+#	 "listen_channel_ids": [], # channels in which to listen for commands
+#	 "listen_all_channels": False, # if true, listen for commands in all text channels
+#	 "listen_DMs": True, # listen for commands via DM to the bot
+#	 "logo_url": "https://iyanovich.files.wordpress.com/2009/04/transmission-logo.png", # URL to logo that appears in some output
+#	 "notification_channel_id": 0, # id of channel to which in-channel notificatations will be posted
+#	 "notification_enabled": True, # if False, in-channel and DM notifications are disabled
+#	 "notification_enabled_in_channel": True, # if False, in-channel notifications are disabled, but DM notifications will still work
+#	 "notification_freq": 300, # number of seconds between checking transfers and posting notifications
+#	 "notification_DM_opt_out_user_ids": [], # DON'T MODIFY (used by bot to record users that have opted out of receiving DM notifications)
+#	 "notification_states":{ # determines the types of transfer state changes that are reported in notifications...
+#		 "in_channel": # ...for in-channel notifications, (this is the full list of potential state changes)
+#		 [
+#			 "new",
+#			 "removed",
+#			 "error",
+#			 "downloaded",
+#			 "stalled",
+#			 "unstalled",
+#			 "finished",
+#			 "stopped",
+#			 "started"
+#		 ],
+#		 "notified_users": # ...DM notifications for users that opted in to DM notifications for transfer(s)
+#		 [
+#			 "removed",
+#			 "error",
+#			 "downloaded",
+#			 "stalled",
+#			 "unstalled",
+#			 "finished",
+#			 "stopped",
+#			 "started"
+#		 ],
+#		 "added_user":# ...and DM notifications to users that added transfers
+#		 [
+#			 "removed",
+#			 "error",
+#			 "downloaded",
+#			 "stalled",
+#			 "unstalled",
+#			 "finished",
+#			 "stopped",
+#			 "started"
+#		 ]
+#	 },
+#	 "repeat_cancel_verbose": True, # if true, print message when auto-update is canceled for a message
+#	 "repeat_freq": 2, # number of seconds between updating an auto-update message
+# 	"repeat_freq_DM_by_user_ids": {}, # use t/repeatfreq to set autoupdate frequency over DM on a per-user basis
+#	 "repeat_timeout_DM_by_user_ids": {}, # same but for autoupdate timeout
+#	 "repeat_timeout": 3600, # number of seconds before an auto-update message times out
+#	 "repeat_timeout_verbose": True, # if true, print message when auto-update message times out and stops updating
+#	 "summary_num_top_ratio": 5 # number of top seed-ratio transfers to show at the bottom of the summary output
+# }
 
 TSCLIENT_CONFIG = None
 
 # logging.basicConfig(format='%(asctime)s %(message)s',filename=join(expanduser("~"),'ts_scripts.log'))
+logName = join(CONFIG_DIR,'transmissionbot.log')
 logging.basicConfig(format='%(asctime)s %(message)s',filename=join(CONFIG_DIR,'transmissionbot.log'))
 logger = logging.getLogger('transmission_bot')
-logger.setLevel(logging.INFO) # set according to table below. values LESS than the set value will be ignored
-
+logger.setLevel(logging.DEBUG) # set according to table below. Events with values LESS than the set value will not be logged
 """
 Level		Numeric value
 __________________________
@@ -134,6 +135,14 @@ INFO		20
 DEBUG		10
 NOTSET		0
 """
+
+fh = logging.handlers.RotatingFileHandler(logName, backupCount=5)
+if os.path.isfile(logName):  # log already exists, roll over!
+	fh.doRollover()
+fmt = logging.Formatter('%(asctime)s [%(threadName)14s:%(filename)8s:%(lineno)5s - %(funcName)20s()] %(levelname)8s: %(message)s')
+fh.setFormatter(fmt)
+logger.addHandler(fh)
+
 
 # END USER CONFIGURATION
 
@@ -208,9 +217,23 @@ def generate_json(json_data=None, path=None, overwrite=False):
 		return False
 	if not exists(os.path.dirname(path)):
 		mkdir_p(os.path.dirname(path))
-	with open(path, 'w') as cf:
+	try:
 		lock()
-		cf.write(dumps(json_data, sort_keys=True, indent=4, separators=(',', ': ')))
+		if exists(path):
+			# first backup the existing file
+			shutil.copy2(path,"{}.bak".format(path))
+			try:
+				with open(path, 'w') as cf:
+					cf.write(dumps(json_data, sort_keys=True, indent=4, separators=(',', ': ')))
+			except Exception as e:
+				logger.error("Exception when writing JSON file {}, reverting to backup: {}".format(path,e))
+				shutil.move("{}.bak".format(path), path)
+		else:
+			with open(path, 'w') as cf:
+				cf.write(dumps(json_data, sort_keys=True, indent=4, separators=(',', ': ')))
+	except Exception as e:
+		logger.fatal("Exception when writing JSON file: {}".format(e))
+	finally:
 		unlock()
 	return True
 
@@ -407,10 +430,11 @@ def make_client():
 	:param args: Optional CLI args passed in.
 	:return:
 	"""
+	logger.debug("Making new TSClient")
 	global MAKE_CLIENT_FAILED
 	tsclient = None
-	lock()
 	try:
+		lock()
 		tsclient = TSClient(
 			TSCLIENT_CONFIG['host'],
 			port=TSCLIENT_CONFIG['port'],
@@ -418,6 +442,7 @@ def make_client():
 			password=TSCLIENT_CONFIG['password']
 		)
 		MAKE_CLIENT_FAILED = False
+		logger.debug("Made new TSClient")
 	except Exception as e:
 		logger.error("Failed to make TS client: {}".format(e))
 		MAKE_CLIENT_FAILED = True
@@ -705,18 +730,22 @@ def check_for_transfer_changes():
 		# 	'progress':t.progress
 		# }
 	# }
-	lock()
-	curTorrents = {t.hashString:{
-			'name':t.name,
-			'error':t.error,
-			'errorString':t.errorString,
-			'status':t.status,
-			'isStalled':t.isStalled,
-			'progress':t.progress,
-			'added_user':None if t.hashString not in TORRENT_ADDED_USERS else TORRENT_ADDED_USERS[t.hashString],
-			'notified_users':[] if t.hashString not in TORRENT_NOTIFIED_USERS else TORRENT_NOTIFIED_USERS[t.hashString],
-			'optout_users':[] if t.hashString not in TORRENT_OPTOUT_USERS else TORRENT_OPTOUT_USERS[t.hashString]
-		} for t in torrents}
+	
+	try:
+		lock()
+		curTorrents = {t.hashString:{
+				'name':t.name,
+				'error':t.error,
+				'errorString':t.errorString,
+				'status':t.status,
+				'isStalled':t.isStalled,
+				'progress':t.progress,
+				'added_user':None if t.hashString not in TORRENT_ADDED_USERS else TORRENT_ADDED_USERS[t.hashString],
+				'notified_users':[] if t.hashString not in TORRENT_NOTIFIED_USERS else TORRENT_NOTIFIED_USERS[t.hashString],
+				'optout_users':[] if t.hashString not in TORRENT_OPTOUT_USERS else TORRENT_OPTOUT_USERS[t.hashString]
+			} for t in torrents}
+	finally:
+		unlock()
 	if exists(TORRENT_JSON):
 		oldTorrents = load_json(path=TORRENT_JSON)
 		if len(curTorrents) > 0 and len(oldTorrents) > 0 and len(next(iter(curTorrents.values()))) != len(next(iter(oldTorrents.values()))):
@@ -740,20 +769,25 @@ def check_for_transfer_changes():
 					# 		logger.debug("Removing {} ({}) from 'optout_users' for {} ({})".format(user.name, u, t['name'], h))
 					# 		curTorrents[h]['optout_users'].remove(u)
 					# logger.debug("new 'optout_users' for {} ({}): {}".format(t['name'], h, str(curTorrents[h]['optout_users'])))
-					
-		TORRENT_NOTIFIED_USERS = {}
-		TORRENT_ADDED_USERS = {}
-		TORRENT_OPTOUT_USERS = {}
-		unlock()
+		try:
+			lock()
+			TORRENT_NOTIFIED_USERS = {}
+			TORRENT_ADDED_USERS = {}
+			TORRENT_OPTOUT_USERS = {}
+		finally:
+			unlock()
 		generate_json(json_data=curTorrents, path=TORRENT_JSON, overwrite=True)
 	else:
-		TORRENT_NOTIFIED_USERS = {}
-		TORRENT_ADDED_USERS = {}
-		TORRENT_OPTOUT_USERS = {}
-		unlock()
+		try:
+			lock()
+			TORRENT_NOTIFIED_USERS = {}
+			TORRENT_ADDED_USERS = {}
+			TORRENT_OPTOUT_USERS = {}
+		finally:
+			unlock()
 		generate_json(json_data=curTorrents, path=TORRENT_JSON, overwrite=True)
 		return None
-	
+
 
 	# print("before checking")
 	# get lists of different transfer changes
@@ -772,7 +806,7 @@ def check_for_transfer_changes():
 
 
 	# print("done checking for changes")
-	
+
 	# DEBUG grab a few random transfers for each type, vary the number to see if multiple embeds works
 	# print(str(oldTorrents))
 	# numTransfers = 3
@@ -785,7 +819,7 @@ def check_for_transfer_changes():
 	# newTransfers = {h:t for h,t in random.sample(curTorrents.items(),numTransfers)}
 	# print(str(errorTransfers))
 	# print("done applying debug changes")
-	
+
 	return {
 		'new':{'name':"🟢 {0} new transfer{1}", 'data':newTransfers},
 		'removed':{'name':"❌ {0} removed transfer{1}", 'data':removedTransfers},
@@ -798,7 +832,7 @@ def check_for_transfer_changes():
 		'started':{'name':"▶️ {0} transfer{1} resumed", 'data':startedTransfers}
 	}
 
-def prepare_notifications(changedTransfers, states=CONFIG['notification_states']['in_channel']):
+def prepare_notifications(changedTransfers, states=["removed", "error", "downloaded", "stalled", "unstalled", "finished", "stopped", "started"]):
 	nTotal = sum([len(d['data']) for s,d in changedTransfers.items() if s in states]) if changedTransfers is not None else 0
 	torrents = {}
 	if nTotal > 0:
@@ -840,7 +874,7 @@ def prepare_notifications(changedTransfers, states=CONFIG['notification_states']
 	return None, nTotal, torrents
 
 async def check_notification_reactions(message, is_text_channel, torrents, starttime=datetime.datetime.now()):
-	if (datetime.datetime.now() - starttime).total_seconds() >= CONFIG['notification_freq'] * CONFIG['notification_reaction_check_factor']:
+	if (datetime.datetime.now() - starttime).total_seconds() >= CONFIG['reaction_wait_timeout']:
 		if is_text_channel:
 			await message.clear_reactions()
 		return
@@ -849,7 +883,7 @@ async def check_notification_reactions(message, is_text_channel, torrents, start
 		return user.id in CONFIG['whitelist_user_ids'] and reaction.message.id == message.id and (str(reaction.emoji) == '🔕' or (str(reaction.emoji) == '🔔' and is_text_channel))
 	
 	try:
-		reaction, user = await client.wait_for('reaction_add', timeout=CONFIG['notification_freq'], check=check)
+		reaction, user = await client.wait_for('reaction_add', timeout=CONFIG['reaction_wait_timeout'], check=check)
 	except asyncio.TimeoutError:
 		return await check_notification_reactions(message, is_text_channel, torrents, starttime=starttime)
 	else:
@@ -874,13 +908,13 @@ async def check_notification_reactions(message, is_text_channel, torrents, start
 	return await check_notification_reactions(message, is_text_channel, torrents, starttime=starttime)
 
 async def run_notifications():
-	if CONFIG['notification_enabled']:
+	if CONFIG['notification_enabled'] and CONFIG['notification_channel_id'] > 0:
 		# get all changes
 		logger.debug("Running notification check")
 		changedTransfers = check_for_transfer_changes()
 		nTotal = sum([len(d['data']) for d in changedTransfers.values()]) if changedTransfers is not None else 0
 		if nTotal > 0:
-		
+			addReactions = (sum([len(d['data']) for k,d in changedTransfers.items() if k != "removed"]) > 0)
 			# first in_channel notifications
 			if CONFIG['notification_enabled_in_channel']:
 				embeds, n, torrents = prepare_notifications(changedTransfers, CONFIG['notification_states']['in_channel'])
@@ -889,8 +923,9 @@ async def run_notifications():
 				if n > 0:
 					ch = client.get_channel(CONFIG['notification_channel_id'])
 					msgs = [await ch.send(embed=e) for e in embeds]
-					[await msgs[-1].add_reaction(s) for s in ['🔔','🔕']]
-					asyncio.create_task(check_notification_reactions(msgs[-1], True, torrents, datetime.datetime.now()))
+					if addReactions:
+						[await msgs[-1].add_reaction(s) for s in ['🔔','🔕']]
+						asyncio.create_task(check_notification_reactions(msgs[-1], True, torrents, datetime.datetime.now()))
 					
 			
 			# Now notify the users
@@ -906,7 +941,7 @@ async def run_notifications():
 				if s in CONFIG['notification_states']['added_user']:
 					for h,t in d['data'].items():
 						logger.debug("Checking transfer: {} ({})".format(str(t), h))
-						if t['added_user'] is not None and t['added_user'] not in t['optout_users']:
+						if t['added_user'] is not None and t['added_user'] not in t['optout_users'] and t['added_user'] not in CONFIG['notification_DM_opt_out_user_ids']:
 							u = t['added_user']
 							if u in addedUserChangedTransfers:
 								if s in addedUserChangedTransfers[u]:
@@ -940,15 +975,17 @@ async def run_notifications():
 					embeds[-1].set_author(name="Activity for transfer{} you added".format('' if n == 1 else 's'))
 					user = client.get_user(u)
 					msgs = [await user.send(embed=e) for e in embeds]
-					await msgs[-1].add_reaction('🔕')
-					asyncio.create_task(check_notification_reactions(msgs[-1], False, torrents, datetime.datetime.now()))
+					if addReactions:
+						await msgs[-1].add_reaction('🔕')
+						asyncio.create_task(check_notification_reactions(msgs[-1], False, torrents, datetime.datetime.now()))
 			for u,transfers in notifiedUserChangedTransfers.items():
 				logger.debug("Sending notified_user notificaions for user {}".format(u))
 				embeds, n, torrents = prepare_notifications(transfers, CONFIG['notification_states']['notified_users'])
 				if n > 0:
 					user = client.get_user(u)
 					msgs = [await user.send(embed=e) for e in embeds]
-					await msgs[-1].add_reaction('🔕')
+					if addReactions:
+						await msgs[-1].add_reaction('🔕')
 					asyncio.create_task(check_notification_reactions(msgs[-1], False, torrents, datetime.datetime.now()))
 		else:
 			logger.debug("No changed transfers...")
@@ -1188,9 +1225,13 @@ async def add(message, content = ""):
 				try:
 					tor = add_torrent(t["content"])
 					if tor:
-						lock()
-						TORRENT_ADDED_USERS[tor.hashString] = message.author.id
-						unlock()
+						try:
+							lock()
+							TORRENT_ADDED_USERS[tor.hashString] = message.author.id
+						except Exception as e:
+							logger.fatal("Error adding user to 'TORRENT_ADDED_USERS' for new transfer: {}".format(e))
+						finally:
+							unlock()
 						logger.info("User {} ({}) added torrent from file {}: {} ({})".format(message.author.name, message.author.id, t["name"], tor.name, tor.hashString))
 						# if tor.isPrivate:
 						# 	privateTransfers.append(len(privateTransfers))
@@ -1208,9 +1249,13 @@ async def add(message, content = ""):
 					try:
 						tor = add_torrent(t)
 						if tor:
-							lock()
-							TORRENT_ADDED_USERS[tor.hashString] = message.author.id
-							unlock()
+							try:
+								lock()
+								TORRENT_ADDED_USERS[tor.hashString] = message.author.id
+							except Exception as e:
+								logger.fatal("Error adding user to 'TORRENT_ADDED_USERS' for new transfer: {}".format(e))
+							finally:
+								unlock()
 							logger.info("User {} ({}) added torrent from URL: {} ({})".format(message.author.name, message.author.id, tor.name, tor.hashString))
 							# if tor.isPrivate:
 							# 	privateTransfers.append(len(privateTransfers))
@@ -2461,7 +2506,7 @@ async def modify_cmd(context, *, content=""):
 		logger.warning("Exception in t/modify: {}".format(e))
 		
 
-async def toggle_compact_out(message):
+async def toggle_compact_out(message, content=""):
 	global OUTPUT_MODE, CONFIG
 	if isDM(message):
 		if message.author.id in CONFIG['DM_compact_output_user_ids']:
@@ -2503,11 +2548,11 @@ async def LegendGetEmbed(embed_data=None):
 	embed.add_field(name="Error ‼️", value=joinChar.join(["✅—none","⚠️—tracker  warning","🌐—tracker  error","🖥—local  error"]), inline=not isCompact)
 	embed.add_field(name="Activity 📈", value=joinChar.join(["🐢—stalled","🐇—active","🚀—running (rate>0)"]), inline=not isCompact)
 	embed.add_field(name="Tracker 📡", value=joinChar.join(["🔐—private","🔓—public"]), inline=not isCompact)
-	embed.add_field(name="Messages 💬", value=joinChar.join(["🔄—auto-update message","❎—cancel auto-update","🖨—reprint at bottom", "🧾—summarize listed transfers"]), inline=not isCompact)
+	embed.add_field(name="Messages 💬", value=joinChar.join(["🔄—auto-update message","❎—cancel auto-update","🖨—reprint at bottom", "📱 *or* 💻—switch output format to mobile/desktop", "🧾—summarize listed transfers"]), inline=not isCompact)
 	embed.add_field(name="Notifications 📣", value=joinChar.join(["🔔—enable","🔕—disable"]), inline=not isCompact)
 	return embed
 
-async def legend(message):
+async def legend(message, content=""):
 	if await CommandPrecheck(message):
 		await message.channel.send(embed=await LegendGetEmbed())
 	return
@@ -2605,15 +2650,16 @@ async def set_repeat_timeout(message, content=CONFIG['repeat_timeout']):
 async def set_repeat_timeout_cmd(context, content=""):
 	await set_repeat_timeout(context.message, content.strip())
 
-async def toggle_notifications(message):
+
+async def toggle_notifications(message, content=""):
 	global CONFIG
 	if isDM(message) and await CommandPrecheck(message):
 		if message.author.id in CONFIG['notification_DM_opt_out_user_ids']:
 			CONFIG['notification_DM_opt_out_user_ids'].remove(message.author.id)
-			await message.channel.send('🔕 DM notifications disabled')
+			await message.channel.send('🔔 DM notifications enabled')
 		else:
 			CONFIG['notification_DM_opt_out_user_ids'].append(message.author.id)
-			await message.channel.send('🔔 DM notifications enabled')
+			await message.channel.send('🔕 DM notifications disabled')
 		generate_json(json_data=CONFIG, path=CONFIG_JSON, overwrite=True)
 	elif await CommandPrecheck(message, whitelist=CONFIG['owner_user_ids']):
 		if CONFIG['notification_enabled_in_channel']:
@@ -2629,7 +2675,7 @@ async def toggle_notifications(message):
 async def toggle_notifications_cmd(context):
 	await toggle_notifications(context.message)
 	
-async def toggle_dryrun(message):
+async def toggle_dryrun(message, content=""):
 	global CONFIG
 	CONFIG['dryrun'] = not CONFIG['dryrun']
 	await message.channel.send("Toggled dryrun to {}".format(CONFIG['dryrun']))
@@ -2648,24 +2694,21 @@ async def on_message(message):
 	if message_has_torrent_file(message):
 		await add(message, content=message.content)
 	if isDM(message): # dm only
-		if len(message.content) >= len("summary") and "summary" == message.content[:len("summary")]:
-			await summary(message)
-		elif len(message.content) >= len("list") and "list" in message.content[:len("list")]:
-			await list_transfers(message, content=message.content[len("list"):].strip())
-		elif len(message.content) >= len("add") and "add" in message.content[:len("add")]:
-			await add(message, content=message.content[len("add"):].strip())
-		elif len(message.content) >= len("modify") and "modify" in message.content[:len("modify")]:
-			await modify(message, content=message.content[len("modify"):].strip())
-		elif len(message.content) >= len("legend") and "legend" in message.content[:len("legend")]:
-			await legend(message)
-		elif len(message.content) >= len("help") and "help" in message.content[:len("help")]:
-			await help(message, content=message.content[len("help"):].strip())
-		elif len(message.content) >= len("notifications") and "notifications" in message.content[:len("notifications")]:
-			await toggle_notifications(message)
-		elif len(message.content) >= len("compact") and "compact" in message.content[:len("compact")]:
-			await toggle_compact_out(message)
-		else:
-			await client.process_commands(message)
+		contentLower = message.content.lower()
+		c = message.content
+		for k,v in dmCommands.items():
+			for ai in [k] + v['alias']:
+				a = ai
+				cl = contentLower
+				if len(ai) == 1:
+					a += ' '
+					if len(c) == 1:
+						cl += ' '
+						c += ' '
+				if len(cl) >= len(a) and a == cl[:len(a)]:
+					await v['cmd'](message, content=c[len(a):].strip())
+					return
+		await client.process_commands(message)
 	elif not message.guild: # group dm only
 		# do stuff here #
 		pass
@@ -2675,7 +2718,7 @@ async def on_message(message):
 
 client.remove_command('help')
 
-async def help(message, content="", compact_output=(OUTPUT_MODE == OutputMode.MOBILE)):
+async def print_help(message, content="", compact_output=(OUTPUT_MODE == OutputMode.MOBILE)):
 	if await CommandPrecheck(message):
 		if content != "":
 			if content in ["l","list"]:
@@ -2689,13 +2732,14 @@ async def help(message, content="", compact_output=(OUTPUT_MODE == OutputMode.MO
 				embed.add_field(name="By ID specifier", value='`TORRENT_ID_SPECIFIER` is a valid transfer ID specifier—*e.g.* `1,3-5,9` to specify transfers 1, 3, 4, 5, and 9\n*Transfer IDs are the left-most number in the list of transfers (use* `{0}list` *to print full list)*\n*Either TORRENT_ID_SPECIFIER or NAME can be specified, but not both*'.format(CONFIG['bot_prefix']), inline=False)
 				embed.add_field(name="Searching by name", value='`NAME` is a regular expression used to search transfer names (no enclosing quotes; may contain spaces)', inline=False)
 				embed.add_field(name="Examples", value="*List all transfers:* `{0}list`\n*Search using phrase 'ubuntu':* `{0}l ubuntu`\n*List downloading transfers:* `{0}l -f downloading`\n*List 10 most recently added transfers (sort transfers by age and specify number):* `{0}list --sort age -N 10`".format(CONFIG['bot_prefix']), inline=False)
-				await message.channel.send(embed=embed)
+				# await message.channel.send(embed=embed)
 			elif content in ["a","add"]:
 				embed = discord.Embed(title='Add transfer', description="If multiple torrents are added, separate them by spaces", color=0xb51a00)
 				embed.set_author(name="Add one or more specified torrents by magnet link, url to torrent file, or by attaching a torrent file", icon_url=CONFIG['logo_url'])
 				embed.add_field(name="Usage", value='`{0}add TORRENT_FILE_URL_OR_MAGNET_LINK ...`\n`{0}a TORRENT_FILE_URL_OR_MAGNET_LINK ...`'.format(CONFIG['bot_prefix']), inline=False)
-				embed.add_field(name="Examples", value="*Add download of Linux Ubuntu using link to torrent file:* `{0}add https://releases.ubuntu.com/20.04/ubuntu-20.04.1-desktop-amd64.iso.torrent`\n*Add download of ubuntu using the actual `.torrent` file:* Select the `.torrent` file as an attachmend in Discord, then enter `t/a` as the caption".format(CONFIG['bot_prefix']), inline=False)
-				await message.channel.send(embed=embed)
+				embed.add_field(name="Notes", value='*You can add transfers by uploading a torrent file without having to type anything, i.e. no command necessary, just upload it to TransmissionBot\'s channel or via DM*', inline=False)
+				embed.add_field(name="Examples", value="*Add download of Linux Ubuntu using link to torrent file:* `{0}add https://releases.ubuntu.com/20.04/ubuntu-20.04.1-desktop-amd64.iso.torrent`\n*Add download of ubuntu using the actual `.torrent` file:* Select the `.torrent` file as an attachmend in Discord and send, no `{0}add` needed!".format(CONFIG['bot_prefix']), inline=False)
+				# await message.channel.send(embed=embed)
 			elif content in ["m","modify"]:
 				embed = discord.Embed(title='Modify existing transfer(s)', color=0xb51a00)
 				embed.set_author(name="Pause, resume, remove, or remove and delete specified transfer(s)", icon_url=CONFIG['logo_url'])
@@ -2703,25 +2747,25 @@ async def help(message, content="", compact_output=(OUTPUT_MODE == OutputMode.MO
 				embed.add_field(name="Pause or resume ALL transfers", value="Simply run `{0}modify` to pause or resume all existing transfers".format(CONFIG['bot_prefix']), inline=False)
 				embed.add_field(name="By list options", value='`LIST_OPTIONS` is a valid set of options to the `{0}list` command (see `{0}help list` for details)'.format(CONFIG['bot_prefix']), inline=False)
 				embed.add_field(name="Examples", value="`{0}modify`\n`{0}m ubuntu`\n`{0}m 23,34,36-42`\n`{0}m --filter downloading ubuntu`".format(CONFIG['bot_prefix']), inline=False)
-				await message.channel.send(embed=embed)
+				# await message.channel.send(embed=embed)
 			elif content in ["s","summary"]:
 				embed = discord.Embed(title="Print summary of transfers", color=0xb51a00)
 				embed.set_author(name="Print summary of active transfer information", icon_url=CONFIG['logo_url'])
 				embed.add_field(name="Usage", value='`{0}summary [LIST_OPTIONS]`'.format(CONFIG['bot_prefix']), inline=False)
 				embed.add_field(name="By list options", value='`LIST_OPTIONS` is a valid set of options to the `{0}list` command (see `{0}help list` for details)'.format(CONFIG['bot_prefix']), inline=False)
 				embed.add_field(name="Examples", value="`{0}summary`\n`{0}s --filter private`\n`{0}s 23,34,36-42`\n`{0}s --filter downloading ubuntu`".format(CONFIG['bot_prefix']), inline=False)
-				await message.channel.send(embed=embed)
+				# await message.channel.send(embed=embed)
 			elif content in ["config"]:
 				embed = discord.Embed(title="Configuration", color=0xb51a00)
 				embed.set_author(name="Configure bot options", icon_url=CONFIG['logo_url'])
 				embed.add_field(name='Toggle output style', value='*toggle between desktop (default), mobile (narrow), or smart selection of output style*\n*ex.* `{0}compact` or `{0}c`'.format(CONFIG['bot_prefix']), inline=False)
 				embed.add_field(name='Toggle notifications', value='*toggle notifications regarding transfer state changes to be checked every {1} (can be changed in config file)*\n*ex.* `{0}notifications` or `{0}n`'.format(CONFIG['bot_prefix'], humantime(CONFIG['notification_freq'],compact_output=False)), inline=False)
-				embed.add_field(name='Set auto-update message frequency and timeout', value='**Frequency:** *Use* `{0}set-repeat-freq NUM_SECONDS` *to set the repeat frequency of auto-update messages (*`NUM_SECONDS`*must be greater than 0, leave blank to revert to default of {1})*\n**Timeout:** *Use* `{0}set-repeat-timeout NUM_SECONDS` *to set the amount of time an auto-repeat message will repeat until it quits automatically (times out) (*`NUM_SECONDS` *must be greater or equal to 0. Set to 0 for no timeout. Leave blank to revert to default of {2})*'.format(CONFIG['bot_prefix'], humantime(CONFIG['repeat_freq'],compact_output=False),humantime(CONFIG['repeat_timeout'],compact_output=False)), inline=False)
-				await message.channel.send(embed=embed)
+				embed.add_field(name='Set auto-update message frequency and timeout', value='**Frequency:** *Use* `{0}set-repeat-freq NUM_SECONDS` *or* `{0}freq NUM_SECONDS`*to set the repeat frequency of auto-update messages (*`NUM_SECONDS`*must be greater than 0, leave blank to revert to default of {1})*\n**Timeout:** *Use* `{0}set-repeat-timeout NUM_SECONDS` *or* `{0}timeout NUM_SECONDS` *to set the amount of time an auto-repeat message will repeat until it quits automatically (times out) (*`NUM_SECONDS` *must be greater or equal to 0. Set to 0 for no timeout. Leave blank to revert to default of {2})*'.format(CONFIG['bot_prefix'], humantime(CONFIG['repeat_freq'],compact_output=False),humantime(CONFIG['repeat_timeout'],compact_output=False)), inline=False)
+				# await message.channel.send(embed=embed)
 		else:
-			embed = discord.Embed(title='List of commands:', color=0xb51a00)
+			embed = discord.Embed(title='List of commands:', description='Send commands in-channel or directly to me via DM.', color=0xb51a00)
 			embed.set_author(name='Transmission Bot: Manage torrent file transfers', icon_url=CONFIG['logo_url'])
-			embed.add_field(name="Add new torrent transfers", value="*add one or more specified torrents by magnet link, url to torrent file, or by attaching a torrent file*\n*ex.* `{0}add TORRENT ...` or `{0}a TORRENT ...`".format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name="Add new torrent transfers", value="*add one or more specified torrents by magnet link, url to torrent file (in which case you don't need to use a command), or by attaching a torrent file*\n*ex.* `{0}add TORRENT ...` or `{0}a TORRENT ...`".format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name="Modify existing transfers", value="*pause, resume, remove, or remove and delete specified transfers*\n*ex.* `{0}modify [LIST_OPTIONS]` or `{0}m [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name="List torrent transfers", value="*list current transfers with sorting, filtering, and search options*\n*ex.* `{0}list [LIST_OPTIONS]` or `{0}l [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
 			embed.add_field(name="Print summary of transfers", value="*print summary for specified transfers, with followup options to list subsets of those transfers*\n*ex.* `{0}summary [LIST_OPTIONS]` or `{0}s [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
@@ -2736,12 +2780,28 @@ async def help(message, content="", compact_output=(OUTPUT_MODE == OutputMode.MO
 			# 	embed.add_field(name=legendEmbed.title, value='', inline=False)
 			# 	for f in legendEmbed.fields:
 			# 		embed.add_field(name=f.name, value=f.value, inline=f.inline)
-			
+		
+		if not isDM(message):
+			try:
+				await message.author.send(embed=embed)
+				await message.channel.send('Hi {}, I sent you a DM with the help information'.format(message.author.display_name))
+			except:
+				await message.channel.send(embed=embed)
+		else:
 			await message.channel.send(embed=embed)
 
 @client.command(name='help', description='Help HUD.', brief='HELPOOOO!!!', pass_context=True)
 async def help_cmd(context, *, content=""):
-	await help(context.message, content)
+	await print_help(context.message, content)
+	
+@client.command(name='test', pass_context=True)
+async def test(context, *, content=""):
+	if await CommandPrecheck(context.message, whitelist=CONFIG['owner_user_ids']):
+		user = context.message.author
+		await user.send("test message")
+		await context.message.channel.send("Hey {}, I sent you a message!".format(user.display_name))
+		pass
+	return
 
 @client.event
 async def on_command_error(context, error):
@@ -2777,7 +2837,7 @@ async def on_command_error(context, error):
 		return
 	if isinstance(error, commands.UserInputError):
 		await context.send("Invalid input.")
-		await help(context)
+		await print_help(context)
 		return
 	if isinstance(error, commands.NoPrivateMessage):
 		try:
@@ -2811,5 +2871,18 @@ async def on_command_error(context, error):
 		await asyncio.sleep(2)
 		await help_cmd(context)
 	raise error
+
+dmCommands = {
+	'summary': {'alias':['sum','s'], 'cmd':summary},
+	'list': {'alias':['ls','l'], 'cmd':list_transfers},
+	'legend': {'alias':[], 'cmd':legend},
+	'add': {'alias':['a'], 'cmd':add},
+	'modify': {'alias':['mod','m'], 'cmd':modify},
+	'help': {'alias':[], 'cmd':print_help},
+	'compact': {'alias':['c'], 'cmd':toggle_compact_out},
+	'notifications': {'alias':['n'], 'cmd':toggle_notifications},
+	'set-repeat-timeout': {'alias':['timeout'], 'cmd':set_repeat_timeout},
+	'set-repeat-freq': {'alias':['freq'], 'cmd':set_repeat_freq}
+}
 
 client.run(CONFIG['bot_token'])
