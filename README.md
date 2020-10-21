@@ -50,7 +50,7 @@ Using the [transmissionrpc](https://pythonhosted.org/transmissionrpc/) python li
 		* replace `<client_id>` with the `CLIENT ID` from above
 		* replace `<permissions>` with the minimum permissions `93248`(*for read/send/manage messages, embed links, read message history, and add rections*) or administrator permissions `9` to keep things simple
 	2. Invite the bot to your server
-2. Configure `config.json` file starting with `config-sample.json`
+2. Configure [`config.json`](#configfile) file starting with `config-sample.json`
 	* *All values with* `ids` *are referring to Discord IDs, which are 18-digit numbers you can find by following [these instructions](https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID-)*
 	* Values that MUST be configured: `bot_token`, `listen_channel_ids` if you want to use in-channel, `notification_channel_id` if you wish to use in-channel notifications, `owner_user_ids` at least with your Discord user id, `tsclient` with information pointing to your Transmission remote gui, `whitelist_user_ids` at least with your Discord user id and any other Discord users you wish to be able to use the bot.
 	* After first run, a `config.json` file will be created in the same directory as `bot.py`. This file should then be used to make any configuration changes, and the definition of `CONFIG` in `bot.py` should be commented out or removed.
@@ -129,7 +129,7 @@ Using the [transmissionrpc](https://pythonhosted.org/transmissionrpc/) python li
 3. Run bot `python3 /path/to/bot.py`
 	* Bot will create `config.json`, after which you can remove or comment the definition of `CONFIG` in `bot.py` to make future updates easier
 	
-###Configuration
+### <a name="configfile">`config-sample.json` contents</a>
 ```javascript
 {
     "DM_compact_output_user_ids": [], # users that will get compact output via DM (changed by t/compact command)
