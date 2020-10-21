@@ -63,7 +63,7 @@ Using the [transmissionrpc](https://pythonhosted.org/transmissionrpc/) python li
 
 ### <a name="channelDM">Interact via text channels or DMs</a>
 * Use commands with `t/` prefix in text channel or via DM
-* Via DM only, use full command name without prefix (*e.g.* `summary`)
+* Via DM only, use commands without prefix (*e.g.* `summary` or `s` rather than `t/summary` or `t/s`)
 * *Why use DMs vs in-channel?*
 	* Use DMs for user privacy or to keep the in-channel usage clean
 	* Use in-channel when privacy isn't an issue, or if you wish to take advantage of auto-updating output
