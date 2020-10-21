@@ -1,0 +1,65 @@
+{
+    "DM_compact_output_user_ids": [],
+    "blacklist_user_ids": [],
+    "bot_prefix": "t/",
+    "bot_token": "BOT-TOKEN",
+    "delete_command_message_private_torrent": true,
+    "delete_command_messages": false,
+    "dryrun": false,
+    "listen_DMs": true,
+    "listen_all_channels": false,
+    "listen_channel_ids": [],
+    "logo_url": "https://iyanovich.files.wordpress.com/2009/04/transmission-logo.png",
+    "notification_DM_opt_out_user_ids": [],
+    "notification_channel_id": 0,
+    "notification_enabled": true,
+    "notification_enabled_in_channel": true,
+    "notification_freq": 300,
+    "notification_states": {
+        "added_user": [
+            "removed",
+            "error",
+            "downloaded",
+            "finished"
+        ],
+        "in_channel": [
+            "new",
+            "removed",
+            "error",
+            "downloaded",
+            "finished"
+        ],
+        "notified_users": [
+            "removed",
+            "error",
+            "downloaded",
+            "stalled",
+            "unstalled",
+            "finished",
+            "stopped",
+            "started"
+        ]
+    },
+    "owner_user_ids": [],
+    "private_transfer_protection_added_user_override": true,
+    "private_transfer_protection_bot_owner_override": false,
+    "private_transfers_protected": true,
+    "reaction_wait_timeout": 7200,
+    "repeat_cancel_verbose": true,
+    "repeat_freq": 10,
+    "repeat_freq_DM_by_user_ids": {},
+    "repeat_timeout": 3600,
+    "repeat_timeout_DM_by_user_ids": {},
+    "repeat_timeout_verbose": true,
+    "summary_num_top_ratio": 0,
+    "tsclient": {
+        "host": "127.0.0.1",
+        "password": "password",
+        "port": 9091,
+        "user": "admin"
+    },
+    "whitelist_added_user_remove_delete_override": true,
+    "whitelist_user_can_delete": false,
+    "whitelist_user_can_remove": false,
+    "whitelist_user_ids": []
+}
