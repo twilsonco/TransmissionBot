@@ -52,10 +52,11 @@ Using the [transmissionrpc](https://pythonhosted.org/transmissionrpc/) python li
 	2. Invite the bot to your server
 2. Configure `bot.py`
 	1. Set values in the `CONFIG` variable, which are described inline
+		* Values that MUST be configured: `bot_token`, `listen_channel_ids` if you want to use in-channel, `notification_channel_id` if you wish to use in-channel notifications, `owner_user_ids` at least with your Discord user id, `tsclient` with information pointing to your Transmission remote gui, `whitelist_user_ids` at least with your Discord user id and any other Discord users you wish to be able to use the bot.
 		* After first run, a `config.json` file will be created in the same directory as `bot.py`. This file should then be used to make any configuration changes, and the definition of `CONFIG` in `bot.py` should be commented out or removed.
 	2. Configure logging
-		* Pick a location for the logfile on line 112
-		* Optionally disable logging by setting the log level to `logger.CRITICAL` which isn't used anywhere
+		* Pick a location for the logfile on line 124; default is the same directory where bot.py resides
+		* Optionally disable logging by setting the log level to `logging.CRITICAL` which isn't used anywhere
 3. Run with `python3 /path/to/TransmissionBot/bot.py` and enjoy!
 
 ## Detailed features
