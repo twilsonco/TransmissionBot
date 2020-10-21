@@ -36,88 +36,9 @@ from enum import Enum
 CONFIG_DIR = os.path.dirname(os.path.realpath(__file__))
 
 """
-Bot configuration:
-1. set this to you liking
-2. run the bot, which will make a config.json file containing this configuration info
-3. comment or remove the configuration below, as the config.json will be used instead (this also makes updating to new versions easier)
+Bot configuration is done with a config.json file.
 """
-CONFIG = {
-	 "tsclient": { # information for transmission remote web gui
-		 'host': "192.168.0.2",
-		 'port': 9091,
-		 'user': "USERNAME",
-		 'password': "PASSWORD"
-	 },
-	 "whitelist_user_ids": [], # discord users allowed to use bot
-	 "blacklist_user_ids": [], # discord users disallowed to use bot
-	 "owner_user_ids": [], # discord users given full access
-	"DM_compact_output_user_ids": [], # DO NOT EDIT MANUALLY! if a user id is in this list, that user will get compact output via DM (changed by t/compact command)
-	"reaction_wait_timeout": 7200, # seconds the bot should wait for a reaction to be clicked by a user
-	  "delete_command_messages": False, # delete command messages from users
-	 "delete_command_message_private_torrent": True, # deletes command message if that message contains one or more torrent files that use a private tracker
-	 "private_transfers_protected": True, # prevent transfers on private trackers from being removed
-	 "private_transfer_protection_added_user_override": True, # if true, the user that added a private transfer can remove it regardless of 'private_transfers_protected'
-	"private_transfer_protection_bot_owner_override": False, # similar to 'private_transfer_protection_added_user_override', but allows bot owners to delete private transfers
-	 "whitelist_user_can_remove": True, # if true, whitelisted users can remove any transfer
-	 "whitelist_user_can_delete": True, # if true, whitelisted users can remove and delete any transfer
-	 "whitelist_added_user_remove_delete_override": True, # if true, override both 'whitelist_user_can_remove' and 'whitelist_user_can_delete' allowing whitelisted users to remove and delete transfers they added
-	 "bot_prefix": "t/", # bot command prefix
-	 "bot_token": "BOT_TOKEN", # bot token
-	 "dryrun": False, # if true, no changes are actually applied to transfers
-	 "listen_channel_ids": [], # channels in which to listen for commands
-	 "listen_all_channels": False, # if true, listen for commands in all text channels
-	 "listen_DMs": True, # listen for commands via DM to the bot
-	 "logo_url": "https://iyanovich.files.wordpress.com/2009/04/transmission-logo.png", # URL to logo that appears in some output
-	 "notification_channel_id": 0, # id of channel to which in-channel notificatations will be posted
-	 "notification_enabled": True, # if False, in-channel and DM notifications are disabled
-	 "notification_enabled_in_channel": True, # if False, in-channel notifications are disabled, but DM notifications will still work
-	 "notification_freq": 300, # number of seconds between checking transfers and posting notifications
-	 "notification_DM_opt_out_user_ids": [], # DON'T MODIFY (used by bot to record users that have opted out of receiving DM notifications)
-	 "notification_states":{ # determines the types of transfer state changes that are reported in notifications...
-		 "in_channel": # ...for in-channel notifications, (this is the full list of potential state changes)
-		 [
-			 "new",
-			 "removed",
-			 "error",
-			 "downloaded",
-			 "stalled",
-			 "unstalled",
-			 "finished",
-			 "stopped",
-			 "started"
-		 ],
-		 "notified_users": # ...DM notifications for users that opted in to DM notifications for transfer(s)
-		 [
-			 "removed",
-			 "error",
-			 "downloaded",
-			 "stalled",
-			 "unstalled",
-			 "finished",
-			 "stopped",
-			 "started"
-		 ],
-		 "added_user":# ...and DM notifications to users that added transfers
-		 [
-			 "removed",
-			 "error",
-			 "downloaded",
-			 "stalled",
-			 "unstalled",
-			 "finished",
-			 "stopped",
-			 "started"
-		 ]
-	 },
-	 "repeat_cancel_verbose": True, # if true, print message when auto-update is canceled for a message
-	 "repeat_freq": 2, # number of seconds between updating an auto-update message
-	"repeat_freq_DM_by_user_ids": {}, # use t/repeatfreq to set autoupdate frequency over DM on a per-user basis
-	 "repeat_timeout_DM_by_user_ids": {}, # same but for autoupdate timeout
-	 "repeat_timeout": 3600, # number of seconds before an auto-update message times out
-	 "repeat_timeout_verbose": True, # if true, print message when auto-update message times out and stops updating
-	 "summary_num_top_ratio": 5 # number of top seed-ratio transfers to show at the bottom of the summary output
-}
-
+CONFIG = None
 TSCLIENT_CONFIG = None
 
 # logging.basicConfig(format='%(asctime)s %(message)s',filename=join(expanduser("~"),'ts_scripts.log'))
