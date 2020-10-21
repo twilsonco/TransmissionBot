@@ -34,7 +34,7 @@ Using the [transmissionrpc](https://pythonhosted.org/transmissionrpc/) python li
 
 ## Install
 1. Get [Transmission](https://transmissionbt.com) and setup its [web interface](https://helpdeskgeek.com/how-to/using-the-transmission-web-interface/)
-2. Install python 3, [transmissionrpc](https://pypi.org/project/transmissionrpc/), and [discord.py](https://pypi.org/project/discord.py/)
+2. Install python 3, [transmissionrpc](https://pypi.org/project/transmissionrpc/), pytz, and [discord.py](https://pypi.org/project/discord.py/)
 3. Clone this repository using `git clone https://github.com/twilsonco/TransmissionBot`
 
 ## Configure
