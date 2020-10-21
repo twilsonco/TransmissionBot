@@ -130,39 +130,40 @@ Using the [transmissionrpc](https://pythonhosted.org/transmissionrpc/) python li
 	* Bot will create `config.json`, after which you can remove or comment the definition of `CONFIG` in `bot.py` to make future updates easier
 	
 ### <a name="configfile">`config-sample.json` contents</a>
+`"# something"` <— this is a comment
 ```javascript
 {
-    "DM_compact_output_user_ids": [], # users that will get compact output via DM (changed by t/compact command)
-    "blacklist_user_ids": [], # discord users disallowed to use bot
-    "bot_prefix": "t/", # bot command prefix
-    "bot_token": "BOT-TOKEN", # bot token
-    "delete_command_message_private_torrent": true, # deletes command message if that message contains one or more torrent files that use a private tracker
-    "delete_command_messages": false, # delete command messages from users
-    "dryrun": false, # if true, no changes are actually applied to transfers
-    "listen_DMs": true, # listen for commands via DM to the bot
-    "listen_all_channels": false, # if true, listen for commands in all text channels
-    "listen_channel_ids": [], # channels in which to listen for commands
-    "logo_url": "https://iyanovich.files.wordpress.com/2009/04/transmission-logo.png", # URL to logo that appears in some output
-    "notification_DM_opt_out_user_ids": [], # DON'T MODIFY (used by bot to record users that have opted out of receiving DM notifications)
-    "notification_channel_id": 0, # id of channel to which in-channel notificatations will be posted
-    "notification_enabled": true, # if False, in-channel and DM notifications are disabled
-    "notification_enabled_in_channel": true, # if False, in-channel notifications are disabled, but DM notifications will still work
-    "notification_freq": 300, # number of seconds between checking transfers and posting notifications
-    "notification_states": { # determines the types of transfer state changes that are reported in notifications...
-        "added_user": [ # ...and DM notifications to users that added transfers
+    "DM_compact_output_user_ids": [], "# users that will get compact output via DM (changed by t/compact command)"
+    "blacklist_user_ids": [], "# discord users disallowed to use bot"
+    "bot_prefix": "t/", "# bot command prefix"
+    "bot_token": "BOT-TOKEN", "# bot token"
+    "delete_command_message_private_torrent": true, "# deletes command message if that message contains one or more torrent files that use a private tracker"
+    "delete_command_messages": false, "# delete command messages from users"
+    "dryrun": false, "# if true, no changes are actually applied to transfers"
+    "listen_DMs": true, "# listen for commands via DM to the bot"
+    "listen_all_channels": false, "# if true, listen for commands in all text channels"
+    "listen_channel_ids": [], "# channels in which to listen for commands"
+    "logo_url": "https://iyanovich.files.wordpress.com/2009/04/transmission-logo.png", "# URL to logo that appears in some output"
+    "notification_DM_opt_out_user_ids": [], "# DON'T MODIFY (used by bot to record users that have opted out of receiving DM notifications)"
+    "notification_channel_id": 0, "# id of channel to which in-channel notificatations will be posted"
+    "notification_enabled": true, "# if False, in-channel and DM notifications are disabled"
+    "notification_enabled_in_channel": true, "# if False, in-channel notifications are disabled, but DM notifications will still work"
+    "notification_freq": 300, "# number of seconds between checking transfers and posting notifications"
+    "notification_states": { "# determines the types of transfer state changes that are reported in notifications..."
+        "added_user": [ "# ...and DM notifications to users that added transfers"
             "removed",
             "error",
             "downloaded",
             "finished"
         ],
-        "in_channel": [ # ...for in-channel notifications, (this is the full list of potential state changes)
+        "in_channel": [ "# ...for in-channel notifications, (this is the full list of potential state changes)"
             "new",
             "removed",
             "error",
             "downloaded",
             "finished"
         ],
-        "notified_users": [ # ...DM notifications for users that opted in to DM notifications for transfer(s)
+        "notified_users": [ "# ...DM notifications for users that opted in to DM notifications for transfer(s)"
             "removed",
             "error",
             "downloaded",
@@ -173,28 +174,28 @@ Using the [transmissionrpc](https://pythonhosted.org/transmissionrpc/) python li
             "started"
         ]
     },
-    "owner_user_ids": [], # discord users given full access
-    "private_transfer_protection_added_user_override": true, # if true, the user that added a private transfer can remove it regardless of 'private_transfers_protected'
-    "private_transfer_protection_bot_owner_override": false, # similar to 'private_transfer_protection_added_user_override', but allows bot owners to delete private transfers
-    "private_transfers_protected": true, # prevent transfers on private trackers from being removed
-    "reaction_wait_timeout": 7200, # seconds the bot should wait for a reaction to be clicked by a user
-    "repeat_cancel_verbose": true, # if true, print message when auto-update is canceled for a message
-    "repeat_freq": 10, # number of seconds between updating an auto-update message
-    "repeat_freq_DM_by_user_ids": {}, # use t/repeatfreq to set autoupdate frequency over DM on a per-user basis
-    "repeat_timeout": 3600, # number of seconds before an auto-update message times out
-    "repeat_timeout_DM_by_user_ids": {}, # same but for autoupdate timeout
-    "repeat_timeout_verbose": true, # if true, print message when auto-update message times out and stops updating
-    "summary_num_top_ratio": 0, # number of top seed-ratio transfers to show at the bottom of the summary output
-    "tsclient": { # information for transmission remote web gui
+    "owner_user_ids": [], "# discord users given full access"
+    "private_transfer_protection_added_user_override": true, "# if true, the user that added a private transfer can remove it regardless of 'private_transfers_protected'"
+    "private_transfer_protection_bot_owner_override": false, "# similar to 'private_transfer_protection_added_user_override', but allows bot owners to delete private transfers"
+    "private_transfers_protected": true, "# prevent transfers on private trackers from being removed"
+    "reaction_wait_timeout": 7200, "# seconds the bot should wait for a reaction to be clicked by a user"
+    "repeat_cancel_verbose": true, "# if true, print message when auto-update is canceled for a message"
+    "repeat_freq": 10, "# number of seconds between updating an auto-update message"
+    "repeat_freq_DM_by_user_ids": {}, "# use t/repeatfreq to set autoupdate frequency over DM on a per-user basis"
+    "repeat_timeout": 3600, "# number of seconds before an auto-update message times out"
+    "repeat_timeout_DM_by_user_ids": {}, "# same but for autoupdate timeout"
+    "repeat_timeout_verbose": true, "# if true, print message when auto-update message times out and stops updating"
+    "summary_num_top_ratio": 0, "# number of top seed-ratio transfers to show at the bottom of the summary output"
+    "tsclient": { "# information for transmission remote web gui"
         "host": "127.0.0.1",
         "password": "password",
         "port": 9091,
         "user": "admin"
     },
-    "whitelist_added_user_remove_delete_override": true, # if true, override both 'whitelist_user_can_remove' and 'whitelist_user_can_delete' allowing whitelisted users to remove and delete transfers they added
-    "whitelist_user_can_delete": false, # if true, whitelisted users can remove and delete any transfer
-    "whitelist_user_can_remove": false, # if true, whitelisted users can remove any transfer
-    "whitelist_user_ids": [] # discord users allowed to use bot
+    "whitelist_added_user_remove_delete_override": true, "# if true, override both 'whitelist_user_can_remove' and 'whitelist_user_can_delete' allowing whitelisted users to remove and delete transfers they added"
+    "whitelist_user_can_delete": false, "# if true, whitelisted users can remove and delete any transfer"
+    "whitelist_user_can_remove": false, "# if true, whitelisted users can remove any transfer"
+    "whitelist_user_ids": [] "# discord users allowed to use bot"
 }
 ```
 
