@@ -2686,15 +2686,14 @@ async def print_help(message, content="", compact_output=(OUTPUT_MODE == OutputM
 		else:
 			embed = discord.Embed(title='List of commands:', description='Send commands in-channel or directly to me via DM.', color=0xb51a00)
 			embed.set_author(name='Transmission Bot: Manage torrent file transfers', icon_url=CONFIG['logo_url'])
-			embed.add_field(name="Add new torrent transfers", value="*add one or more specified torrents by magnet link, url to torrent file (in which case you don't need to use a command), or by attaching a torrent file*\n*ex.* `{0}add TORRENT ...` or `{0}a TORRENT ...`".format(CONFIG['bot_prefix']), inline=False)
-			embed.add_field(name="Modify existing transfers", value="*pause, resume, remove, or remove and delete specified transfers*\n*ex.* `{0}modify [LIST_OPTIONS]` or `{0}m [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
-			embed.add_field(name="List torrent transfers", value="*list current transfers with sorting, filtering, and search options*\n*ex.* `{0}list [LIST_OPTIONS]` or `{0}l [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
-			embed.add_field(name="Print summary of transfers", value="*print summary for specified transfers, with followup options to list subsets of those transfers*\n*ex.* `{0}summary [LIST_OPTIONS]` or `{0}s [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
-			embed.add_field(name='Configuration', value='*set frequency and timeout of auto-update messages, toggle notifications, and toggle output display style*\n*See* `{0}help config` *for more information*'.format(CONFIG['bot_prefix']), inline=False)
-			
-			
-			embed.add_field(name='Show legend', value='*prints legend showing the meaning of symbols used in the output of other commands*\n*ex.* `{0}legend`'.format(CONFIG['bot_prefix']), inline=False)
-			embed.add_field(name='Help - Gives this menu', value='*with optional details of specified command*\n*ex.* `{0}help` or `{0}help COMMAND`'.format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name="Add new torrent transfers `{0}add`".format(CONFIG['bot_prefix']), value="*add one or more specified torrents by magnet link, url to torrent file (in which case you don't need to use a command), or by attaching a torrent file*\n*ex.* `{0}add TORRENT ...` or `{0}a TORRENT ...`".format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name="Modify existing transfers `{0}modify`".format(CONFIG['bot_prefix']), value="*pause, resume, remove, or remove and delete specified transfers*\n*ex.* `{0}modify [LIST_OPTIONS]` or `{0}m [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name="List torrent transfers `{0}list`".format(CONFIG['bot_prefix']), value="*list current transfers with sorting, filtering, and search options*\n*ex.* `{0}list [LIST_OPTIONS]` or `{0}l [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name="Print summary of transfers `{0}summary`".format(CONFIG['bot_prefix']), value="*print summary for specified transfers, with followup options to list subsets of those transfers*\n*ex.* `{0}summary [LIST_OPTIONS]` or `{0}s [LIST_OPTIONS]`".format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name='Show legend `{0}legend`'.format(CONFIG['bot_prefix']), value='*prints legend showing the meaning of symbols used in the output of other commands*\n*ex.* `{0}legend`'.format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name='Help - Gives this menu `{0}help`'.format(CONFIG['bot_prefix']), value='*with optional details of specified command*\n*ex.* `{0}help` or `{0}help COMMAND`'.format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name='Configuration `{0}help config`'.format(CONFIG['bot_prefix']), value='*set frequency and timeout of auto-update messages, toggle notifications, and toggle output display style*\n*See* `{0}help config` *for more information*'.format(CONFIG['bot_prefix']), inline=False)
+			embed.add_field(name='Bot information `{0}info`'.format(CONFIG['bot_prefix']), value='*prints information pertaining to the physical server running the bot*', inline=False)
 			
 			# if not compact_output:
 			# 	legendEmbed=await LegendGetEmbed()
@@ -2714,6 +2713,34 @@ async def print_help(message, content="", compact_output=(OUTPUT_MODE == OutputM
 @client.command(name='help', description='Help HUD.', brief='HELPOOOO!!!', pass_context=True)
 async def help_cmd(context, *, content=""):
 	await print_help(context.message, content)
+
+async def print_info(message, content=""):
+	# get public IP address
+	import requests as req
+	
+	async with message.channel.typing():
+		try:
+			publicIP = req.get("https://wtfismyip.com/text").text.strip()
+		except Exception as e:
+			logger.error("Failed to get public IP address (from https://wtfismyip.com/text): {}".format(e))
+			publicIP = "Failed to resolve (check logs)"
+	
+		# TODO get Transmission client and session info
+		# TODO get discord.py info
+	
+	
+		# prepare output embed
+		embed = discord.Embed(title='TransmissionBot info', description="*All information pertains to the machine on which the bot is running...*", color=0xb51a00)
+		embed.add_field(name="Public IP", value=publicIP, inline=True)
+	
+	await message.channel.send(embed=embed)
+	
+	return
+
+@client.command(name='info', pass_context=True)
+async def info_cmd(context, *, content=""):
+	if await CommandPrecheck(context.message, whitelist=CONFIG['owner_user_ids']):
+		await print_info(context.message)
 	
 @client.command(name='test', pass_context=True)
 async def test(context, *, content=""):
