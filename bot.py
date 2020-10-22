@@ -2902,7 +2902,8 @@ dmCommands = {
 	'compact': {'alias':['c'], 'cmd':toggle_compact_out},
 	'notifications': {'alias':['n'], 'cmd':toggle_notifications},
 	'set-repeat-timeout': {'alias':['timeout'], 'cmd':set_repeat_timeout},
-	'set-repeat-freq': {'alias':['freq'], 'cmd':set_repeat_freq}
+	'set-repeat-freq': {'alias':['freq'], 'cmd':set_repeat_freq},
+	'info': {'alias':[], 'cmd':print_info}
 }
 
 client.run(CONFIG['bot_token'])
