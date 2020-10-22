@@ -1017,6 +1017,25 @@ def humantime(S, compact_output=(OUTPUT_MODE == OutputMode.MOBILE)): # return hu
 	out = "{} {}{}".format(S, sStr, '' if S == 1 else 's')
 	return out
 
+def humancount(B,d = 2):
+	'Return the given ~~bytes~~ *count* as a human friendly KB, MB, GB, or TB string'
+	B = float(B)
+	KB = float(1000) # thousand
+	MB = float(KB ** 2) # million
+	GB = float(KB ** 3) # billion
+	TB = float(KB ** 4) # trillion
+	
+	if B < KB:
+		return '{0} B'.format(B)
+	elif KB <= B < MB:
+		return '{0:.{nd}f} thousand'.format(B/KB, nd = d)
+	elif MB <= B < GB:
+		return '{0:.{nd}f} million'.format(B/MB, nd = d)
+	elif GB <= B < TB:
+		return '{0:.{nd}f} billion'.format(B/GB, nd = d)
+	elif TB <= B:
+		return '{0:.{nd}f} trillion'.format(B/TB, nd = d)
+
 def humanbytes(B,d = 2):
 	'Return the given bytes as a human friendly KB, MB, GB, or TB string'
 	B = float(B)
@@ -2715,23 +2734,76 @@ async def help_cmd(context, *, content=""):
 	await print_help(context.message, content)
 
 async def print_info(message, content=""):
-	# get public IP address
 	import requests as req
+	from netifaces import interfaces, ifaddresses, AF_INET
 	
 	async with message.channel.typing():
+		# get public IP address
+		# modified from MattMoony's gist: https://gist.github.com/MattMoony/80b05a48b1bcdc64df32f95ed269a393
 		try:
 			publicIP = req.get("https://wtfismyip.com/text").text.strip()
+			publicIP = "*Public*: " + publicIP
 		except Exception as e:
 			logger.error("Failed to get public IP address (from https://wtfismyip.com/text): {}".format(e))
-			publicIP = "Failed to resolve (check logs)"
+			publicIP = "Failed to resolve public IP (check logs)"
 	
-		# TODO get Transmission client and session info
+		# get local addresses
+		# from DzinX's answer: https://stackoverflow.com/a/166591/2620767
+		try:
+		    addresses = ['*{}*: {}'.format(ifaceName, i['addr']) for ifaceName in interfaces() for i in ifaddresses(ifaceName).setdefault(AF_INET, [{'addr':'No IP addr'}] ) if i['addr'] != "No IP addr"]
+		except Exception as e:
+			logger.error("Failed to get local IP address: {}".format(e))
+			addresses = ["Failed to resolve local IPs (check logs)"]
+		
+		addresses = '\n'.join([publicIP] + addresses)
+	
+		# get Transmission client and session info
+		try:
+			session = TSCLIENT.session_stats()
+			trpcinfo = {
+				'version rpc': session.rpc_version,
+				'version transmission': session.version,
+				'download dir': session.download_dir,
+				'download dir free space': humanbytes(session.download_dir_free_space, d=1),
+				'peer limit global': session.peer_limit_global,
+				'peer limit per torrent': session.peer_limit_per_torrent,
+				'peer port': session.peer_port
+			}
+			if session.incomplete_dir_enabled:
+				trpcinfo['incomplete dir'] = session.incomplete_dir
+			if session.seedRatioLimited:
+				trpcinfo['seed ratio limit'] = session.seedRatioLimit
+			if session.speed_limit_down_enabled:
+				trpcinfo['speed limit down'] = humanbytes(session.speed_limit_down, d=1) + '/s'
+			if session.speed_limit_up_enabled:
+				trpcinfo['speed limit up'] = humanbytes(session.speed_limit_up, d=1) + '/s'
+			if session.idle_seeding_limit_enabled:
+				trpcinfo['idle seeding limit'] = session.idle_seeding_limit
+			
+			trpcStr = '\n'.join(['*{}*: {}'.format(k,v) for k,v in trpcinfo.items()])
+			
+			# get session statistics
+			try:
+				stats = ['\n'.join(['*{}*: {}'.format(k,v) for k,v in {'downloaded': humanbytes(stat['downloadedBytes'],d=1), 'uploaded': humanbytes(stat['uploadedBytes'],d=1), 'files added': humancount(stat['filesAdded'],d=1), 'session count': stat['sessionCount'], 'uptime': humantime(stat['secondsActive'], compact_output=False)}.items()]) for stat in [session.current_stats,session.cumulative_stats]]
+			except Exception as e:
+				logger.error("Failed to get transmission session statistics: {}".format(e))
+				stats = ['Failed to get', 'Failed to get']
+			
+		except Exception as e:
+			logger.error("Failed to get transmission (rpc) info: {}".format(e))
+			trpcStr = "Failed to get transmission (rpc) info (check logs)"
+			stats = ['Failed to get', 'Failed to get']
+		
+		
 		# TODO get discord.py info
 	
 	
 		# prepare output embed
 		embed = discord.Embed(title='TransmissionBot info', description="*All information pertains to the machine on which the bot is running...*", color=0xb51a00)
-		embed.add_field(name="Public IP", value=publicIP, inline=True)
+		embed.add_field(name="IP Addresses", value=addresses, inline=True)
+		embed.add_field(name="Transmission (rpc) info", value=trpcStr, inline=False)
+		embed.add_field(name="Current session stats", value=stats[0], inline=True)
+		embed.add_field(name="Cumulative session stats", value=stats[1], inline=True)
 	
 	await message.channel.send(embed=embed)
 	
