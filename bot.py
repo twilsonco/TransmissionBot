@@ -1036,6 +1036,20 @@ def humancount(B,d = 2):
 	elif TB <= B:
 		return '{0:.{nd}f} trillion'.format(B/TB, nd = d)
 
+def timeofday(S, ampm=True):
+	H,M = divmod(S,60)
+	if ampm:
+		if H == 0:
+			timestr = '12:{:02d} AM'.format(M)
+		elif H < 12:
+			timestr = '{}:{:02d} AM'.format(H,M)
+		else:
+			timestr = '{}:{:02d} PM'.format(H - 12,M)
+	else:
+		timestr = '{}:{:02d}'.format(H,M)
+	
+	return timestr
+
 def humanbytes(B,d = 2):
 	'Return the given bytes as a human friendly KB, MB, GB, or TB string'
 	B = float(B)
@@ -2742,15 +2756,17 @@ async def print_info(message, content=""):
 		# modified from MattMoony's gist: https://gist.github.com/MattMoony/80b05a48b1bcdc64df32f95ed269a393
 		try:
 			publicIP = req.get("https://wtfismyip.com/text").text.strip()
-			publicIP = "*Public*: " + publicIP
+			publicIP = "Public: " + publicIP
 		except Exception as e:
 			logger.error("Failed to get public IP address (from https://wtfismyip.com/text): {}".format(e))
 			publicIP = "Failed to resolve public IP (check logs)"
 	
 		# get local addresses
 		# from DzinX's answer: https://stackoverflow.com/a/166591/2620767
+		
 		try:
-		    addresses = ['*{}*: {}'.format(ifaceName, i['addr']) for ifaceName in interfaces() for i in ifaddresses(ifaceName).setdefault(AF_INET, [{'addr':'No IP addr'}] ) if i['addr'] != "No IP addr"]
+			addresses = ['{}: {}'.format(ifaceName, i['addr']) for ifaceName in interfaces() for i in ifaddresses(ifaceName).setdefault(AF_INET, [{'addr':'No IP addr'}] )]
+			# addresses = ['{}: {}'.format(ifaceName, i['addr']) for ifaceName in interfaces() for i in ifaddresses(ifaceName).setdefault(AF_INET, [{'addr':'No IP addr'}] ) if i['addr'] != "No IP addr"]
 		except Exception as e:
 			logger.error("Failed to get local IP address: {}".format(e))
 			addresses = ["Failed to resolve local IPs (check logs)"]
@@ -2761,30 +2777,64 @@ async def print_info(message, content=""):
 		try:
 			session = TSCLIENT.session_stats()
 			trpcinfo = {
-				'version rpc': session.rpc_version,
-				'version transmission': session.version,
-				'download dir': session.download_dir,
-				'download dir free space': humanbytes(session.download_dir_free_space, d=1),
-				'peer limit global': session.peer_limit_global,
-				'peer limit per torrent': session.peer_limit_per_torrent,
-				'peer port': session.peer_port
+				'alt_speed_limit_down': humanbytes(session.alt_speed_down*1024,d=1)+'/s',
+				'alt_speed_limit_enabled': session.alt_speed_enabled,
+				'alt_speed_limit_up': humanbytes(session.alt_speed_up*1024,d=1)+'/s',
+				'alt_speed_time_begin': timeofday(session.alt_speed_time_begin),
+				'alt_speed_time_day': session.alt_speed_time_day,
+				'alt_speed_time_enabled': session.alt_speed_time_enabled,
+				'alt_speed_time_end': timeofday(session.alt_speed_time_end),
+				'alt_speed_up': session.alt_speed_up,
+				'blocklist_enabled': session.blocklist_enabled,
+				'blocklist_size': session.blocklist_size,
+				'blocklist_url': session.blocklist_url,
+				'cache_size_mb': session.cache_size_mb,
+				'config_dir': session.config_dir,
+				'dht_enabled': session.dht_enabled,
+				'download_dir': session.download_dir,
+				'download_dir_free_space': session.download_dir_free_space,
+				'download_dir_free_space': humanbytes(session.download_dir_free_space,d=1),
+				'download_queue_enabled': session.download_queue_enabled,
+				'download_queue_size': session.download_queue_size,
+				'encryption': session.encryption,
+				'idle_seeding_limit': session.idle_seeding_limit,
+				'idle_seeding_limit_enabled': session.idle_seeding_limit_enabled,
+				'incomplete_dir': session.incomplete_dir,
+				'incomplete_dir_enabled': session.incomplete_dir_enabled,
+				'lpd_enabled': session.lpd_enabled,
+				'peer_limit_global': session.peer_limit_global,
+				'peer_limit_per_torrent': session.peer_limit_per_torrent,
+				'peer_port': session.peer_port,
+				'peer_port_random_on_start': session.peer_port_random_on_start,
+				'pex_enabled': session.pex_enabled,
+				'port_forwarding_enabled': session.port_forwarding_enabled,
+				'queue_stalled_enabled': session.queue_stalled_enabled,
+				'queue_stalled_minutes': session.queue_stalled_minutes,
+				'rename_partial_files': session.rename_partial_files,
+				'rpc_version': session.rpc_version,
+				'rpc_version_minimum': session.rpc_version_minimum,
+				'script_torrent_done_enabled': session.script_torrent_done_enabled,
+				'script_torrent_done_filename': session.script_torrent_done_filename,
+				'seedRatioLimit': session.seedRatioLimit,
+				'seedRatioLimited': session.seedRatioLimited,
+				'seed_queue_enabled': session.seed_queue_enabled,
+				'seed_queue_size': session.seed_queue_size,
+				'session_id': session.session_id if hasattr(session, 'session_id') else "N/A",
+				'speed_limit_down_enabled': session.speed_limit_down_enabled,
+				'speed_limit_down': humanbytes(session.speed_limit_down*1024,d=1)+'/s',
+				'speed_limit_up_enabled': session.speed_limit_up_enabled,
+				'speed_limit_up': humanbytes(session.speed_limit_up*1024,d=1)+'/s',
+				'start_added_torrents': session.start_added_torrents,
+				'trash_original_torrent_files': session.trash_original_torrent_files,
+				'utp_enabled': session.utp_enabled,
+				'version': session.version,
 			}
-			if session.incomplete_dir_enabled:
-				trpcinfo['incomplete dir'] = session.incomplete_dir
-			if session.seedRatioLimited:
-				trpcinfo['seed ratio limit'] = session.seedRatioLimit
-			if session.speed_limit_down_enabled:
-				trpcinfo['speed limit down'] = humanbytes(session.speed_limit_down, d=1) + '/s'
-			if session.speed_limit_up_enabled:
-				trpcinfo['speed limit up'] = humanbytes(session.speed_limit_up, d=1) + '/s'
-			if session.idle_seeding_limit_enabled:
-				trpcinfo['idle seeding limit'] = session.idle_seeding_limit
 			
-			trpcStr = '\n'.join(['*{}*: {}'.format(k,v) for k,v in trpcinfo.items()])
+			trpcStr = '\n'.join(['{}: {}'.format(k,v) for k,v in trpcinfo.items()])
 			
 			# get session statistics
 			try:
-				stats = ['\n'.join(['*{}*: {}'.format(k,v) for k,v in {'downloaded': humanbytes(stat['downloadedBytes'],d=1), 'uploaded': humanbytes(stat['uploadedBytes'],d=1), 'files added': humancount(stat['filesAdded'],d=1), 'session count': stat['sessionCount'], 'uptime': humantime(stat['secondsActive'], compact_output=False)}.items()]) for stat in [session.current_stats,session.cumulative_stats]]
+				stats = ['\n'.join(['{}: {}'.format(k,v) for k,v in {'downloaded': humanbytes(stat['downloadedBytes'],d=1), 'uploaded': humanbytes(stat['uploadedBytes'],d=1), 'files added': humancount(stat['filesAdded'],d=1), 'session count': stat['sessionCount'], 'uptime': humantime(stat['secondsActive'], compact_output=False)}.items()]) for stat in [session.current_stats,session.cumulative_stats]]
 			except Exception as e:
 				logger.error("Failed to get transmission session statistics: {}".format(e))
 				stats = ['Failed to get', 'Failed to get']
@@ -2799,11 +2849,11 @@ async def print_info(message, content=""):
 	
 	
 		# prepare output embed
-		embed = discord.Embed(title='TransmissionBot info', description="*All information pertains to the machine on which the bot is running...*", color=0xb51a00)
-		embed.add_field(name="IP Addresses", value=addresses, inline=True)
-		embed.add_field(name="Transmission (rpc) info", value=trpcStr, inline=False)
-		embed.add_field(name="Current session stats", value=stats[0], inline=True)
-		embed.add_field(name="Cumulative session stats", value=stats[1], inline=True)
+		embed = discord.Embed(title='TransmissionBot info', description="*All information pertains to the machine on which the bot is running...*\n\n" + "```python\n" + trpcStr + "\n```", color=0xb51a00)
+		embed.add_field(name="IP Addresses", value="```python\n" + addresses + "\n```", inline=True)
+		# embed.add_field(name="Transmission (rpc) info", value="```" + trpcStr + "```", inline=False)
+		embed.add_field(name="Current session stats", value="```python\n" + stats[0] + "\n```", inline=True)
+		embed.add_field(name="Cumulative session stats", value="```python\n" + stats[1] + "\n```", inline=True)
 	
 	await message.channel.send(embed=embed)
 	
