@@ -2830,11 +2830,11 @@ async def print_info(message, content=""):
 				'version': session.version,
 			}
 			
-			trpcStr = '\n'.join(['{}: {}'.format(k,v) for k,v in trpcinfo.items()])
+			trpcStr = '\n'.join(["{}: {}{}{}".format(k,"'" if isinstance(v,str) else '', v, "'" if isinstance(v,str) else '') for k,v in trpcinfo.items()])
 			
 			# get session statistics
 			try:
-				stats = ['\n'.join(['{}: {}'.format(k,v) for k,v in {'downloaded': humanbytes(stat['downloadedBytes'],d=1), 'uploaded': humanbytes(stat['uploadedBytes'],d=1), 'files added': humancount(stat['filesAdded'],d=1), 'session count': stat['sessionCount'], 'uptime': humantime(stat['secondsActive'], compact_output=False)}.items()]) for stat in [session.current_stats,session.cumulative_stats]]
+				stats = ['\n'.join(["{}: {}{}{}".format(k,"'" if isinstance(v,str) else '', v, "'" if isinstance(v,str) else '') for k,v in {'downloaded': humanbytes(stat['downloadedBytes'],d=1), 'uploaded': humanbytes(stat['uploadedBytes'],d=1), 'files added': humancount(stat['filesAdded'],d=1), 'session count': stat['sessionCount'], 'uptime': humantime(stat['secondsActive'], compact_output=False)}.items()]) for stat in [session.current_stats,session.cumulative_stats]]
 			except Exception as e:
 				logger.error("Failed to get transmission session statistics: {}".format(e))
 				stats = ['Failed to get', 'Failed to get']
