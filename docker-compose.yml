@@ -1,0 +1,8 @@
+version: '3.3'
+services:
+    transmissionbot:
+        image: 'jpdsc/transmissionbot'
+        container_name: TransmissionBot
+        volumes:
+            - 'path_to_config.json:TransmissionBot/config.json:rw'
+        restart: unless-stopped
