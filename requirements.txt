@@ -1,4 +1,0 @@
-transmissionrpc
-pytz
-netifaces
-discord.py
