@@ -1,8 +1,8 @@
 version: '3.3'
 services:
     transmissionbot:
-        image: 'jpdsc/transmissionbot'
+        image: '##/##' # build the image to Docker Hub
         container_name: TransmissionBot
         volumes:
-            - '/path_to_config.json:/TransmissionBot/config.json:rw'
+            - '/path_to_config.json:/transmissionbot/config.json:rw'
         restart: unless-stopped

@@ -1,9 +1,9 @@
 FROM python:3.8-alpine
 SHELL ["/bin/sh", "-c"]
 
-ARG user=transmissionbot
-ARG group=transmissionbot
-ARG installdir=transmissionbot
+ARG USER=transmissionbot
+ARG GROUP=transmissionbot
+ARG INSTALLDIR=transmissionbot
 
 RUN apk update && apk upgrade && apk add --no-cache \
   bash \
@@ -19,20 +19,20 @@ RUN pip install --upgrade pip \
   netifaces \
   discord.py
 
-RUN addgroup -S $group \
+RUN addgroup -S $GROUP \
   && adduser \
   --disabled-password \
-  --ingroup $group \
-  $user \
-  && mkdir $installdir
+  --ingroup $GROUP \
+  $USER \
+  && mkdir $INSTALLDIR
 
-COPY ./bot.py ./$installdir
+COPY ./bot.py ./$INSTALLDIR
 
-WORKDIR $installdir
+WORKDIR $INSTALLDIR
 
 RUN sed -i "41s/.*/CONFIG = 'config.json'/" ./bot.py \
-  && chown -R $user:$group .
+  && chown -R $USER:$GROUP .
 
-USER $user
+USER $USER
 
 CMD [ "python3", "./bot.py" ]
